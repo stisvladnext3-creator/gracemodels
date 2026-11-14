@@ -1,0 +1,22 @@
+{
+  "name": "grace-models-site",
+  "main": "dist/server/index.js",
+  "compatibility_date": "2026-06-01",
+  "vars": {
+    "ADMIN_LOGIN": "gracemodels"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "grace-models",
+      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "BUCKET",
+      "bucket_name": "grace-models-media"
+    }
+  ]
+}
