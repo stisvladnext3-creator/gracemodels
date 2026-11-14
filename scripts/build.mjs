@@ -9,7 +9,7 @@ async function collect(dir) {
     if (entry.isDirectory()) await collect(filename);
     else if (!entry.name.endsWith('.json')) {
       const extension = path.extname(filename);
-      const types = { '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'application/javascript; charset=utf-8', '.jpg':'image/jpeg', '.webp':'image/webp', '.png':'image/png', '.svg':'image/svg+xml' };
+      const types = { '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'application/javascript; charset=utf-8', '.jpg':'image/jpeg', '.webp':'image/webp', '.png':'image/png', '.svg':'image/svg+xml', '.woff2':'font/woff2', '.ttf':'font/ttf' };
       assets['/' + path.relative(publicDir, filename).split(path.sep).join('/')] = { type:types[extension] || 'application/octet-stream', body:(await readFile(filename)).toString('base64') };
     }
   }

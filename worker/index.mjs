@@ -111,7 +111,7 @@ export async function createInquiry(request,env){
   if(kind==='application'&&(!Number.isFinite(height)||height<100||height>230))throw error('Укажите рост в сантиметрах.');
   const modelId=clean(form.get('model_id'),100);let modelName='';
   if(modelId){const model=await env.DB.prepare('SELECT name FROM models WHERE id=? AND published=1').bind(modelId).first();if(!model)throw error('Анкета модели недоступна. Выберите другую модель.');modelName=model.name;}
-  const files=form.getAll('photos').filter(f=>typeof f!=='string'&&f.size>0);
+  const files=[...form.getAll('photos'),...form.getAll('photos[]')].filter(f=>typeof f!=='string'&&f.size>0);
   if(files.length>3||files.reduce((s,f)=>s+f.size,0)>15*1024*1024)throw error('Добавьте не более 3 файлов, до 5 МБ каждый.');
   await rateLimit(request,env);
   const id=crypto.randomUUID(),attachments=[];

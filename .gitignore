@@ -6,3 +6,10 @@ outputs/
 .env*
 .dev.vars*
 *.log
+
+/config.php
+/install-key.php
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+/php-build/

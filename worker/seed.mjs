@@ -1,10 +1,10 @@
 export const defaultSettings = {
-  name:'FORMA', descriptor:'MODEL MANAGEMENT', city:'Москва', city_en:'Moscow',
-  email:'hello@forma.agency', phone:'', telegram:'', instagram:'', vk:'',
+  name:'Grace Models', descriptor:'MODEL MANAGEMENT', city:'Москва', city_en:'Moscow',
+  email:'hello@example.com', phone:'', telegram:'', instagram:'', vk:'',
   tagline:'Лица, которые запоминают.', tagline_en:'Faces you remember.',
-  about:'Мы видим характер за внешностью. FORMA — пространство для новых лиц, сильных индивидуальностей и творческого сотрудничества. Мы соединяем моделей и команды, которым близок внимательный, современный взгляд на моду.',
-  about_en:'We see the character behind the face. FORMA is a space for new talent, strong personalities and creative collaborations. We connect models with teams that share a thoughtful, contemporary perspective on fashion.',
-  seo_title:'FORMA — модельное агентство', seo_description:'Модели, новые лица и творческое сотрудничество. Каталог и заявки в модельное агентство FORMA.',
+  about:'Мы видим характер за внешностью. Grace Models — пространство для новых лиц, сильных индивидуальностей и творческого сотрудничества. Мы соединяем моделей и команды, которым близок внимательный, современный взгляд на моду.',
+  about_en:'We see the character behind the face. Grace Models is a space for new talent, strong personalities and creative collaborations. We connect models with teams that share a thoughtful, contemporary perspective on fashion.',
+  seo_title:'Grace Models — модельное агентство', seo_description:'Модели, новые лица и творческое сотрудничество. Каталог и заявки в модельное агентство Grace Models.',
   hero_image:'/images/woman-02.jpg', hero_secondary:'/images/man-04.jpg', demo_mode:true
 };
 const templates = [

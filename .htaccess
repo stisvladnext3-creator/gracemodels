@@ -1,0 +1,12 @@
+Options -Indexes
+DirectoryIndex index.php
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^(?:app|storage|backup|worker|drizzle|scripts|tests|tools|public|dist|node_modules)(?:/|$) - [F,L,NC]
+  RewriteRule ^(?:config(?:\.example)?\.php|install-key\.php|composer\.(?:json|lock)|package(?:-lock)?\.json|.*\.(?:sqlite|sqlite3|sql|ini|log)|\..*)$ - [F,L,NC]
+  RewriteRule ^(?:index|install)\.php$ - [L]
+  RewriteRule ^ index.php [QSA,L]
+</IfModule>
+<FilesMatch "^(config(?:\.example)?\.php|install-key\.php|\.user\.ini|\.htaccess)$">
+  Require all denied
+</FilesMatch>
