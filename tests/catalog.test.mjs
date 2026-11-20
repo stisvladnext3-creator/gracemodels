@@ -17,3 +17,17 @@ test('name search supports both languages and can be combined with saved models'
   assert.equal(filterModels(models,{q:'eva',saved:true},['a']).length,0);
   assert.equal(filterModels(models,{}).length,3);
 });
+
+test('first and last names match in either order and normalize ё',()=>{
+  const named=[{...models[0],name:'Алёна Смирнова',name_en:'Alena Smirnova'}];
+  assert.equal(filterModels(named,{q:'  СМИРНОВА алена  '}).length,1);
+  assert.equal(filterModels(named,{q:'Smirnova Alena'}).length,1);
+  assert.equal(filterModels(named,{q:'Иванова Алёна'}).length,0);
+});
+
+test('cup size is distinct from chest measurements and all filters combine',()=>{
+  const board=[{...models[0],bust_cup:'B'},{...models[1],bust_cup:'C'}];
+  assert.deepEqual(filterModels(board,{bust_cup:'B',bust_min:'83',bust_max:'85',waist_min:'60',hips_max:'90',eyes:'brown',hair:'brown',shoe:'39',min:'177',max:'177'}).map(m=>m.id),['a']);
+  assert.equal(filterModels(board,{bust_cup:'C',bust_min:'84'}).length,0);
+  assert.equal(filterModels(board,{bust_cup:'D'}).length,0);
+});

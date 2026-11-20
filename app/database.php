@@ -13,7 +13,46 @@ function grace_connect(array $config): PDO {
     }
     return $pdo;
 }
-function grace_db(): PDO { static $pdo; return $pdo ??= grace_connect(grace_config()); }
+function grace_db(): PDO {
+    static $pdo;
+    if ($pdo === null) {
+        $config=grace_config();
+        $connection=grace_connect($config);
+        grace_upgrade_database($connection,$config);
+        $pdo=$connection;
+    }
+    return $pdo;
+}
+
+function grace_database_columns(PDO $pdo, string $table, bool $mysql): array {
+    $rows=$pdo->query($mysql?'SHOW COLUMNS FROM '.$table:'PRAGMA table_info('.$table.')')->fetchAll();
+    return array_column($rows,$mysql?'Field':'name');
+}
+
+function grace_upgrade_database(PDO $pdo, array $config): void {
+    $settings=grace_table('settings',$config);
+    $stored=$pdo->query("SELECT setting_value FROM $settings WHERE setting_key='schema_version'")->fetchColumn();
+    if ((int)$stored>=2) return;
+    $mysql=$config['database']['driver']==='mysql';
+    foreach (['models'=>['bust_cup'=>"VARCHAR(3) NOT NULL DEFAULT ''"],'inquiries'=>['consent_version'=>"VARCHAR(40) NOT NULL DEFAULT ''",'consent_at'=>"VARCHAR(40) NOT NULL DEFAULT ''"]] as $name=>$definitions) {
+        $table=grace_table($name,$config);
+        foreach ($definitions as $column=>$definition) {
+            if (in_array($column,grace_database_columns($pdo,$table,$mysql),true)) continue;
+            try { $pdo->exec('ALTER TABLE '.$table.' ADD COLUMN `'.$column.'` '.$definition); }
+            catch (PDOException $exception) {
+                // Another request may have added this column while we waited.
+                if (!in_array($column,grace_database_columns($pdo,$table,$mysql),true)) throw $exception;
+            }
+        }
+    }
+    $statement=$pdo->query("SELECT setting_value FROM $settings WHERE setting_key='agency'");
+    $agency=json_decode((string)$statement->fetchColumn(),true,64,JSON_THROW_ON_ERROR);
+    if (is_array($agency) && in_array($agency['email'] ?? '',['','hello@example.com','info@example.com'],true)) {
+        $agency['email']='Info@grace-models.com';
+        $pdo->prepare("UPDATE $settings SET setting_value=? WHERE setting_key='agency'")->execute([json_encode($agency,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)]);
+    }
+    $pdo->exec("UPDATE $settings SET setting_value='2' WHERE setting_key='schema_version'");
+}
 function grace_table(string $name, ?array $config = null): string {
     $prefix = ($config ?? grace_config())['database']['prefix'];
     if (!preg_match('/^[a-zA-Z0-9_]+$/',$prefix.$name)) throw new RuntimeException('Invalid database table');
@@ -39,14 +78,14 @@ function grace_setting(string $key): mixed {
 function grace_save_setting(string $key, mixed $value): void {
     grace_query('UPDATE '.grace_table('settings').' SET setting_value=? WHERE setting_key=?',[json_encode($value,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),$key]);
 }
-function grace_settings(): array { return grace_setting('agency') ?? grace_seed()['settings']; }
+function grace_settings(): array { return ['applications_enabled'=>true,...(grace_setting('agency') ?? grace_seed()['settings'])]; }
 function grace_seed(): array { static $seed; return $seed ??= json_decode((string)file_get_contents(GRACE_ROOT.'/app/seed.json'),true,64,JSON_THROW_ON_ERROR); }
 function grace_audit(string $action, string $subject): void { grace_insert('activity',['id'=>grace_id(),'action'=>$action,'subject'=>grace_text($subject,180),'created_at'=>grace_now()]); }
 function grace_create_schema(PDO $pdo, array $config): void {
     $mysql=$config['database']['driver']==='mysql'; $text=$mysql?'LONGTEXT':'TEXT';
     $schemas=[
-        'models'=>"id VARCHAR(64) PRIMARY KEY, slug VARCHAR(100) NOT NULL UNIQUE, name VARCHAR(160) NOT NULL, name_en VARCHAR(160) NOT NULL, gender VARCHAR(20) NOT NULL, category VARCHAR(30) NOT NULL, city VARCHAR(160) NOT NULL, height INTEGER NOT NULL, bust INTEGER NOT NULL, waist INTEGER NOT NULL, hips INTEGER NOT NULL, shoe INTEGER NOT NULL, hair VARCHAR(30) NOT NULL, eyes VARCHAR(30) NOT NULL, cover TEXT NOT NULL, gallery $text NOT NULL, bio $text NOT NULL, bio_en $text NOT NULL, published INTEGER NOT NULL DEFAULT 0, featured INTEGER NOT NULL DEFAULT 0, demo INTEGER NOT NULL DEFAULT 0, sort_order INTEGER NOT NULL DEFAULT 0, created_at VARCHAR(40) NOT NULL, updated_at VARCHAR(40) NOT NULL",
-        'inquiries'=>"id VARCHAR(64) PRIMARY KEY, kind VARCHAR(30) NOT NULL, name VARCHAR(160) NOT NULL, email VARCHAR(254) NOT NULL, phone VARCHAR(100) NOT NULL, city VARCHAR(160) NOT NULL, age INTEGER NULL, height INTEGER NULL, instagram TEXT NOT NULL, model_id VARCHAR(64) NOT NULL, model_name VARCHAR(160) NOT NULL, company VARCHAR(254) NOT NULL, shooting_date VARCHAR(40) NOT NULL, message $text NOT NULL, attachments $text NOT NULL, status VARCHAR(30) NOT NULL, internal_note $text NOT NULL, consent INTEGER NOT NULL, created_at VARCHAR(40) NOT NULL, updated_at VARCHAR(40) NOT NULL",
+        'models'=>"id VARCHAR(64) PRIMARY KEY, slug VARCHAR(100) NOT NULL UNIQUE, name VARCHAR(160) NOT NULL, name_en VARCHAR(160) NOT NULL, gender VARCHAR(20) NOT NULL, category VARCHAR(30) NOT NULL, city VARCHAR(160) NOT NULL, height INTEGER NOT NULL, bust_cup VARCHAR(3) NOT NULL DEFAULT '', bust INTEGER NOT NULL, waist INTEGER NOT NULL, hips INTEGER NOT NULL, shoe INTEGER NOT NULL, hair VARCHAR(30) NOT NULL, eyes VARCHAR(30) NOT NULL, cover TEXT NOT NULL, gallery $text NOT NULL, bio $text NOT NULL, bio_en $text NOT NULL, published INTEGER NOT NULL DEFAULT 0, featured INTEGER NOT NULL DEFAULT 0, demo INTEGER NOT NULL DEFAULT 0, sort_order INTEGER NOT NULL DEFAULT 0, created_at VARCHAR(40) NOT NULL, updated_at VARCHAR(40) NOT NULL",
+        'inquiries'=>"id VARCHAR(64) PRIMARY KEY, kind VARCHAR(30) NOT NULL, name VARCHAR(160) NOT NULL, email VARCHAR(254) NOT NULL, phone VARCHAR(100) NOT NULL, city VARCHAR(160) NOT NULL, age INTEGER NULL, height INTEGER NULL, instagram TEXT NOT NULL, model_id VARCHAR(64) NOT NULL, model_name VARCHAR(160) NOT NULL, company VARCHAR(254) NOT NULL, shooting_date VARCHAR(40) NOT NULL, message $text NOT NULL, attachments $text NOT NULL, status VARCHAR(30) NOT NULL, internal_note $text NOT NULL, consent INTEGER NOT NULL, consent_version VARCHAR(40) NOT NULL DEFAULT '', consent_at VARCHAR(40) NOT NULL DEFAULT '', created_at VARCHAR(40) NOT NULL, updated_at VARCHAR(40) NOT NULL",
         'news'=>"id VARCHAR(64) PRIMARY KEY, title VARCHAR(300) NOT NULL, title_en VARCHAR(300) NOT NULL, summary $text NOT NULL, summary_en $text NOT NULL, body $text NOT NULL, body_en $text NOT NULL, image TEXT NOT NULL, published INTEGER NOT NULL, published_at VARCHAR(40) NOT NULL, created_at VARCHAR(40) NOT NULL, updated_at VARCHAR(40) NOT NULL",
         'settings'=>"setting_key VARCHAR(80) PRIMARY KEY, setting_value $text NOT NULL",
         'activity'=>"id VARCHAR(64) PRIMARY KEY, action VARCHAR(200) NOT NULL, subject TEXT NOT NULL, created_at VARCHAR(40) NOT NULL",
@@ -62,7 +101,7 @@ function grace_seed_database(PDO $pdo, array $config, bool $demo, string $agency
     $pdo->beginTransaction();
     try {
         grace_insert('settings',['setting_key'=>'agency','setting_value'=>json_encode($settings,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)],$pdo,$config);
-        grace_insert('settings',['setting_key'=>'schema_version','setting_value'=>'1'],$pdo,$config);
+        grace_insert('settings',['setting_key'=>'schema_version','setting_value'=>'2'],$pdo,$config);
         if ($demo) {
             foreach ($seed['models'] as $model) {
                 $model['gallery']=json_encode($model['gallery'],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);

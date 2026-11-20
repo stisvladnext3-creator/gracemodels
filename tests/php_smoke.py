@@ -9,15 +9,17 @@ from concurrent.futures import ThreadPoolExecutor
 
 parser=argparse.ArgumentParser()
 parser.add_argument('--php',default='php');parser.add_argument('--apache',default='apache2');parser.add_argument('--modules',default='/usr/lib/apache2/modules');parser.add_argument('--ini',default='')
-parser.add_argument('--source',default='');parser.add_argument('--browser',action='store_true');parser.add_argument('--library-path',default='');parser.add_argument('--driver',choices=['sqlite','mysql'],default='sqlite');parser.add_argument('--mysql-host',default='127.0.0.1');parser.add_argument('--mysql-port',default='3306');parser.add_argument('--mysql-database',default='grace_php_test');parser.add_argument('--mysql-user',default='root')
+parser.add_argument('--source',default='');parser.add_argument('--upgrade-from',default='');parser.add_argument('--browser',action='store_true');parser.add_argument('--library-path',default='');parser.add_argument('--driver',choices=['sqlite','mysql'],default='sqlite');parser.add_argument('--mysql-host',default='127.0.0.1');parser.add_argument('--mysql-port',default='3306');parser.add_argument('--mysql-database',default='grace_php_test');parser.add_argument('--mysql-user',default='root')
 args=parser.parse_args();root=Path(args.source).resolve() if args.source else Path(__file__).resolve().parents[1]
 temporary=Path(tempfile.mkdtemp(prefix='grace-php-'));site=temporary/'site';site.mkdir();runtime=temporary/'apache';runtime.mkdir();(runtime/'locks').mkdir()
-for filename in ['index.php','install.php','.htaccess','.user.ini']:
-    shutil.copy2(root/filename,site/filename)
-for folder in ['app','public','images','fonts']:
-    if (root/folder).is_dir():shutil.copytree(root/folder,site/folder)
-for asset in root.iterdir():
-    if asset.is_file() and asset.suffix in ['.js','.css','.svg']:shutil.copy2(asset,site/asset.name)
+def copy_site(source):
+    for filename in ['index.php','install.php','.htaccess','.user.ini']:
+        shutil.copy2(source/filename,site/filename)
+    for folder in ['app','public','images','fonts']:
+        if (source/folder).is_dir():shutil.copytree(source/folder,site/folder,dirs_exist_ok=True)
+    for asset in source.iterdir():
+        if asset.is_file() and asset.suffix in ['.js','.css','.svg']:shutil.copy2(asset,site/asset.name)
+copy_site(Path(args.upgrade_from).resolve() if args.upgrade_from else root)
 env=os.environ.copy()
 if args.library_path:env['LD_LIBRARY_PATH']=args.library_path+':'+env.get('LD_LIBRARY_PATH','')
 with socket.socket() as reserve:reserve.bind(('127.0.0.1',0));port=reserve.getsockname()[1]
@@ -114,6 +116,19 @@ try:
     fields['install_key']=key;code,headers,body=installation(fields)
     if code!=303:raise AssertionError('Installation failed: '+str(code)+' '+body[:3000].decode(errors='replace')+'\n'+(runtime/'error.log').read_text())
     admin_path=headers['Location'];check('admin address is individually generated',bool(re.fullmatch(r'/s/[a-f0-9]{24}',admin_path)))
+    if args.upgrade_from:
+        before=api('/api/public');saved_config=(site/'config.php').read_bytes()
+        previous_headers,_=expect('/api/studio/login',method='POST',data={'login':admin,'password':password})
+        previous_cookie=previous_headers['Set-Cookie'].split(';')[0]
+        legacy=upload('/api/inquiries',{'kind':'booking','name':'Legacy inquiry','email':'legacy@example.test','phone':'+70000000000','consent':'yes'},[])
+        copy_site(root)
+        after=api('/api/studio/data',cookie=previous_cookie)
+        check('upgrade preserves the active login and all models',[m['id'] for m in after['models']]==[m['id'] for m in before['models']])
+        old=next(i for i in after['inquiries'] if i['id']==legacy['id'])
+        check('upgrade never assigns new consent text to old inquiries',old['consent'] and old['consent_version']=='' and old['consent_at']=='')
+        check('upgrade preserves hosting credentials and admin URL',(site/'config.php').read_bytes()==saved_config)
+        check('new fields appear after automatic migration',all('bust_cup' in m for m in after['models']))
+        api('/api/studio/inquiries/'+legacy['id'],method='DELETE',cookie=previous_cookie)
     check('installer locks after setup',request('/install.php')[0]==404)
     check('private files are outside document root',(temporary/'private-data').is_dir() and not (site/'private-data').exists())
     public=api('/api/public');check('Grace Models name and demo catalogue load',public['settings']['name']=='Grace Models' and len(public['models'])==12)
@@ -124,14 +139,14 @@ try:
             browser=automation.chromium.launch(headless=True,executable_path=shutil.which('chromium'),args=['--no-sandbox'])
             page=browser.new_page(viewport={'width':1440,'height':1000})
             errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
-            page.goto(origin,wait_until='domcontentloaded');page.wait_for_selector('.hero-title')
+            page.goto(origin,wait_until='domcontentloaded');page.wait_for_selector('.hero-title');page.locator('[data-cookie-choice=necessary]').click()
             page.evaluate('() => document.fonts.ready')
             check('desktop Grace Models branding',page.locator('.hero-title').inner_text()=='GRACE MODELS')
             check('desktop has no horizontal overflow',page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'))
             page.screenshot(path=str(temporary/'desktop.png'))
             page.goto(origin+'/models',wait_until='domcontentloaded');page.wait_for_selector('.model-card')
             page.locator('#model-search').fill('alina');check('browser model search works',page.locator('.model-card').count()==1)
-            page.locator('.reset-filters').first.click();page.locator('[data-gender="men"]').click();check('browser category filters work',page.locator('.model-card').count()==5)
+            page.locator('.reset-filters').first.click();page.locator('[data-category="new"]').click();check('browser category filters work',page.locator('.model-card').count()==4)
             page.locator('.model-card a').first.click();page.wait_for_selector('.profile-details')
             page.locator('[data-lightbox]').first.click();check('portfolio lightbox opens',page.locator('#lightbox').evaluate('(element)=>element.open'))
             page.locator('.lightbox-close').click()
@@ -159,33 +174,53 @@ try:
             browser.close()
     for path in ['/models','/models/alina','/about','/contacts','/become-a-model','/booking','/news','/']:
         _,page=expect(path);check('public route '+path,b'Grace Models' in page and b'FORMA' not in page)
+    _,legal=expect('/privacy');legal_text=legal.decode()
+    check('full consent names the operator, address and withdrawal email',all(value in legal_text for value in ['7706548391','1047796616471','Брестская','Info@grace-models.com','10 (десяти) рабочих дней','3 (трех) лет','бронирование']))
+    _,cookies=expect('/cookies');check('cookie policy explains actual cookies and local storage',all(value in cookies.decode() for value in ['grace_cookie_choice','grace_models_admin','forma-language','forma-shortlist','Настройки cookie']))
+    for path in ['/cookies.js','/cookies.css','/model-options.js','/legal.css','/images/grace-models-logo.png']:expect(path)
+    check('new public assets are accessible',True)
     for path in ['/config.php','/app/bootstrap.php','/app/seed.json','/public/admin.html','/.git/config','/backup/data.json']:
         check('blocked '+path,request(path)[0] in [403,404])
     expect('/api/studio/data',status=401);expect('/admin.js',status=401)
     _,login_page=expect(admin_path);check('hidden page displays password login',b'login-form' in login_page)
+    check('login page includes company requisites and consent link',all(value in login_page.decode() for value in ['7706548391','1047796616471','Брестская','Info@grace-models.com','href="/privacy"']))
     expect('/api/studio/login',status=401,method='POST',data={'login':admin,'password':'incorrect'})
     headers,_=expect('/api/studio/login',method='POST',data={'login':admin,'password':password})
     cookie=headers['Set-Cookie'].split(';')[0]
     check('persistent HttpOnly cookie is issued','HttpOnly' in headers['Set-Cookie'] and 'Max-Age=34560000' in headers['Set-Cookie'] and 'SameSite=Lax' in headers['Set-Cookie'])
     headers,_=expect('/api/studio/data',cookie=cookie);check('cookie is renewed on access','Max-Age=34560000' in headers['Set-Cookie'])
     data=api('/api/studio/data',cookie=cookie);check('admin data and login are accessible',data['user']['login']==admin and len(data['models'])==12)
-    draft={**public['models'][0],'slug':'php-test-model','name':'PHP проверка','published':False,'demo':False}
+    draft={**public['models'][0],'slug':'php-test-model','name':'Алёна Смирнова','bust_cup':'C','hair':'light_brown','eyes':'hazel','published':False,'demo':False}
     created=api('/api/studio/models',method='POST',data=draft,cookie=cookie,status=201);model_id=created['id']
     check('drafts are hidden from visitors',not any(m['id']==model_id for m in api('/api/public')['models']))
     draft['published']=True;api('/api/studio/models/'+model_id,method='PUT',data=draft,cookie=cookie)
     check('published model is visible',any(m['id']==model_id for m in api('/api/public')['models']))
     expect('/api/studio/models',method='POST',data=draft,cookie=cookie,status=409)
     invalid={**draft,'slug':'bad-model','height':999};expect('/api/studio/models',method='POST',data=invalid,cookie=cookie,status=400)
+    expect('/api/studio/models',method='POST',data={**draft,'slug':'invalid-cup','bust_cup':'ZZ'},cookie=cookie,status=400)
     photo=upload('/api/studio/upload',{},[('file','portrait.png','image/png',png)],cookie)
     _,image=expect(photo['url']);check('uploaded image is served correctly',image==png)
     upload('/api/studio/upload',{},[('file','evil.jpg','image/jpeg',b'<?php echo 1;')],cookie,status=400)
     draft['cover']=photo['url'];draft['gallery']=[photo['url']];api('/api/studio/models/'+model_id,method='PUT',data=draft,cookie=cookie)
     stored=next(m for m in api('/api/public')['models'] if m['id']==model_id);check('gallery changes persist',stored['cover']==photo['url'] and stored['gallery']==[photo['url']])
-    base={'name':'Тестовая заявка','email':'fixture@example.test','phone':'+70000000000','consent':'yes','message':'Проверка PHP'}
+    check('cup, hair, eyes and full name persist independently',stored['bust_cup']=='C' and stored['hair']=='light_brown' and stored['eyes']=='hazel' and stored['name']=='Алёна Смирнова' and stored['bust']==draft['bust'])
+    base={'name':'Тестовая заявка','email':'fixture@example.test','phone':'+70000000000','consent':'yes','consent_version':'2026-11-21','message':'Проверка PHP'}
+    upload('/api/inquiries',{**base,'kind':'booking','consent':'no'},[],status=400)
+    upload('/api/inquiries',{**base,'kind':'booking','consent_version':'outdated'},[],status=409)
+    check('server rejects absent consent and outdated consent text',not api('/api/studio/data',cookie=cookie)['inquiries'])
     booking=upload('/api/inquiries',{**base,'kind':'booking','model_id':model_id},[])
     application=upload('/api/inquiries',{**base,'kind':'application','age':'21','height':'177','city':'Тест'},[('photos[]','front.png','image/png',png),('photos[]','profile.png','image/png',png)])
     received=api('/api/studio/data',cookie=cookie)['inquiries'];candidate=next(i for i in received if i['id']==application['id'])
     check('booking and candidate inquiries are stored',len(received)==2 and len(candidate['attachments'])==2)
+    check('consent version and acceptance time are recorded',all(i['consent'] and i['consent_version']=='2026-11-21' and i['consent_at']==i['created_at'] for i in received))
+    api('/api/studio/settings',method='PUT',data={'applications_enabled':False},cookie=cookie)
+    check('applications setting is a stored boolean',api('/api/public')['settings']['applications_enabled'] is False)
+    upload('/api/inquiries',{**base,'kind':'application','age':'21','height':'177'},[],status=403)
+    off_booking=upload('/api/inquiries',{**base,'kind':'booking'},[])
+    api('/api/studio/inquiries/'+off_booking['id'],method='DELETE',cookie=cookie)
+    check('closed applications block candidates but keep bookings working',len(api('/api/studio/data',cookie=cookie)['inquiries'])==2)
+    api('/api/studio/settings',method='PUT',data={'applications_enabled':True},cookie=cookie)
+    check('applications can be enabled again',api('/api/public')['settings']['applications_enabled'] is True)
     key=candidate['attachments'][0]['key'];private_path='/api/studio/files/'+key
     expect(private_path,status=401);expect('/media/'+key,status=404)
     headers,attachment=expect(private_path,cookie=cookie);check('candidate files stay private and downloadable',attachment==png and 'attachment;' in headers.get('Content-Disposition',''))

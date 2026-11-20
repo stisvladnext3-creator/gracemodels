@@ -1,10 +1,10 @@
 {
   "settings": {
     "name": "Grace Models",
-    "descriptor": "MODEL MANAGEMENT",
+    "descriptor": "",
     "city": "Москва",
     "city_en": "Moscow",
-    "email": "hello@example.com",
+    "email": "Info@grace-models.com",
     "phone": "",
     "telegram": "",
     "instagram": "",
@@ -17,7 +17,8 @@
     "seo_description": "Модели, новые лица и творческое сотрудничество. Каталог и заявки в модельное агентство Grace Models.",
     "hero_image": "/images/woman-02.jpg",
     "hero_secondary": "/images/man-04.jpg",
-    "demo_mode": true
+    "demo_mode": true,
+    "applications_enabled": true
   },
   "models": [
     {

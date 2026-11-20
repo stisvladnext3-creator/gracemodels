@@ -25,8 +25,11 @@ function grace_validate_model(array $input): array {
         if (!is_numeric($value) || (float)$value<$min || (float)$value>$max) grace_error('Проверьте поле «'.$key.'».');
         $out[$key]=(int)round((float)$value);
     }
-    $out['hair']=in_array($input['hair'] ?? '',['blonde','brown','black','red','other'],true)?$input['hair']:'brown';
-    $out['eyes']=in_array($input['eyes'] ?? '',['blue','brown','green','gray','other'],true)?$input['eyes']:'brown';
+    $out['hair']=in_array($input['hair'] ?? '',['blonde','light_brown','brown','black','red','gray','other'],true)?$input['hair']:'brown';
+    $out['eyes']=in_array($input['eyes'] ?? '',['blue','brown','green','gray','hazel','gray_blue','gray_green','other'],true)?$input['eyes']:'brown';
+    $cup=grace_text($input['bust_cup'] ?? '',10);
+    if (!in_array($cup,['','AA','A','B','C','D','DD','E','F','G','H'],true)) grace_error('Выберите размер чашки бюста из списка.');
+    $out['bust_cup']=$cup;
     $out['cover']=grace_media_url($input['cover'] ?? ''); $gallery=is_array($input['gallery'] ?? null)?$input['gallery']:[];
     $gallery=array_values(array_unique(array_filter(array_map('grace_media_url',array_slice($gallery,0,24)))));
     $out['gallery']=json_encode($gallery,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
@@ -81,9 +84,11 @@ function grace_create_inquiry(): never {
     $input=$_POST;
     if (!empty($input['website'])) grace_error('Не удалось отправить заявку.');
     $kind=$input['kind'] ?? ''; if (!in_array($kind,['application','booking'],true)) grace_error('Неверный тип заявки.');
+    if ($kind==='application' && !grace_settings()['applications_enabled']) grace_error('Прием анкет временно закрыт.',403);
     $name=grace_text($input['name'] ?? '',100); $email=strtolower(grace_text($input['email'] ?? '',200)); $phone=grace_text($input['phone'] ?? '',60);
     if ($name==='' || !filter_var($email,FILTER_VALIDATE_EMAIL) || $phone==='') grace_error('Укажите имя, телефон и корректный email.');
     if (($input['consent'] ?? '')!=='yes') grace_error('Нужно согласие на обработку данных.');
+    if (($input['consent_version'] ?? '')!==GRACE_CONSENT_VERSION) grace_error('Текст согласия обновился. Обновите страницу и подтвердите согласие еще раз.',409);
     $age=$height=null;
     if ($kind==='application') {
         $age=filter_var($input['age'] ?? null,FILTER_VALIDATE_INT); $height=filter_var($input['height'] ?? null,FILTER_VALIDATE_INT);
@@ -98,7 +103,8 @@ function grace_create_inquiry(): never {
     $id=grace_id(); $attachments=[];
     try {
         foreach ($files as $file) $attachments[]=grace_put_upload($file,'private/inquiries/'.$id,true);
-        grace_insert('inquiries',['id'=>$id,'kind'=>$kind,'name'=>$name,'email'=>$email,'phone'=>$phone,'city'=>grace_text($input['city'] ?? '',100),'age'=>$age,'height'=>$height,'instagram'=>grace_text($input['instagram'] ?? '',200),'model_id'=>$modelId,'model_name'=>$modelName,'company'=>grace_text($input['company'] ?? '',200),'shooting_date'=>grace_text($input['shooting_date'] ?? '',40),'message'=>grace_text($input['message'] ?? '',5000),'attachments'=>json_encode($attachments,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),'status'=>'new','internal_note'=>'','consent'=>1,'created_at'=>grace_now(),'updated_at'=>grace_now()]);
+        $acceptedAt=grace_now();
+        grace_insert('inquiries',['id'=>$id,'kind'=>$kind,'name'=>$name,'email'=>$email,'phone'=>$phone,'city'=>grace_text($input['city'] ?? '',100),'age'=>$age,'height'=>$height,'instagram'=>grace_text($input['instagram'] ?? '',200),'model_id'=>$modelId,'model_name'=>$modelName,'company'=>grace_text($input['company'] ?? '',200),'shooting_date'=>grace_text($input['shooting_date'] ?? '',40),'message'=>grace_text($input['message'] ?? '',5000),'attachments'=>json_encode($attachments,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),'status'=>'new','internal_note'=>'','consent'=>1,'consent_version'=>GRACE_CONSENT_VERSION,'consent_at'=>$acceptedAt,'created_at'=>$acceptedAt,'updated_at'=>$acceptedAt]);
     } catch (Throwable $exception) { foreach ($attachments as $file) @unlink(grace_file_path($file['key'])); throw $exception; }
     grace_json(['ok'=>true,'id'=>$id,'reference'=>strtoupper(substr($id,0,8))],201);
 }
@@ -147,7 +153,7 @@ function grace_api(string $path): never {
     if ($resource==='settings' && $method==='PUT') {
         $input=grace_read_json(); $settings=grace_settings();
         foreach (array_keys(grace_seed()['settings']) as $key) if (array_key_exists($key,$input)) {
-            if ($key==='demo_mode') $settings[$key]=(bool)filter_var($input[$key],FILTER_VALIDATE_BOOLEAN);
+            if (in_array($key,['demo_mode','applications_enabled'],true)) $settings[$key]=(bool)filter_var($input[$key],FILTER_VALIDATE_BOOLEAN);
             elseif (str_starts_with($key,'hero_')) $settings[$key]=grace_media_url($input[$key]);
             elseif (in_array($key,['telegram','instagram','vk'],true)) $settings[$key]=str_starts_with(grace_text($input[$key],500),'https://') && filter_var($input[$key],FILTER_VALIDATE_URL)?grace_text($input[$key],500):'';
             else $settings[$key]=grace_text($input[$key],str_starts_with($key,'about')?10000:500);

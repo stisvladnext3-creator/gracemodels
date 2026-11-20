@@ -6,7 +6,7 @@ parser=argparse.ArgumentParser();parser.add_argument('--output',default='grace-m
 root=Path(__file__).resolve().parents[1];target=Path(args.output)
 if not target.is_absolute():target=root/target
 files={}
-for name in ['index.php','install.php','.htaccess','.user.ini','INSTALL_PHP.md','nginx.example.conf']:
+for name in ['index.php','install.php','.htaccess','.user.ini','INSTALL_PHP.md','UPDATE_PHP_V2_1.md','nginx.example.conf']:
     files[name]=root/name
 for file in sorted((root/'app').rglob('*')):
     if file.is_file():files[file.relative_to(root).as_posix()]=file
@@ -18,7 +18,7 @@ for file in sorted((root/'public').rglob('*')):
     # Nginx static caches; HTML templates remain behind the PHP controller.
     destination='public/'+relative if file.suffix=='.html' else relative
     files[destination]=file
-metadata={'product':'Grace Models','version':'2.0.0','runtime':'PHP 8.1+','databases':['MySQL/MariaDB','SQLite'],'node_required':False,'composer_required':False,'cloudflare_required':False}
+metadata={'product':'Grace Models','version':'2.1.0','runtime':'PHP 8.1+','databases':['MySQL/MariaDB','SQLite'],'node_required':False,'composer_required':False,'cloudflare_required':False}
 target.parent.mkdir(parents=True,exist_ok=True)
 with zipfile.ZipFile(target,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
     for name,file in sorted(files.items()):archive.write(file,name)
