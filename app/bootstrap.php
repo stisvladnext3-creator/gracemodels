@@ -2,7 +2,8 @@
 declare(strict_types=1);
 if (!defined('GRACE_ROOT')) { http_response_code(404); exit; }
 
-const GRACE_VERSION = '2.1.0';
+const GRACE_VERSION = '2.2.0';
+const GRACE_SCHEMA_VERSION = 3;
 const GRACE_CONSENT_VERSION = '2026-11-21';
 const GRACE_COOKIE = 'grace_models_admin';
 const GRACE_COOKIE_AGE = 34560000;
@@ -58,21 +59,48 @@ function grace_config(): array {
     if (!is_array($loaded) || empty($loaded['installed']) || empty($loaded['data_dir'])) grace_error('Проверьте настройки сайта.',503);
     return $config = $loaded;
 }
+function grace_normalize_origin(string $value): ?string {
+    if (str_contains($value,"\n") || str_contains($value,"\r")) return null;
+    try { $parts=parse_url($value); } catch (ValueError) { return null; }
+    if (!$parts || !in_array(strtolower($parts['scheme'] ?? ''),['http','https'],true) || empty($parts['host'])) return null;
+    foreach (['user','pass','query','fragment'] as $part) if (array_key_exists($part,$parts)) return null;
+    if (!in_array($parts['path'] ?? '',['','/'],true)) return null;
+    $scheme=strtolower($parts['scheme']); $host=strtolower($parts['host']);
+    if (!preg_match('/^(?:[a-z0-9.-]+|\[[a-f0-9:]+\])$/',$host)) return null;
+    $port=(int)($parts['port'] ?? ($scheme==='https'?443:80));
+    if ($port<1 || $port>65535) return null;
+    return $scheme.'://'.$host.((($scheme==='https' && $port===443)||($scheme==='http' && $port===80))?'':':'.$port);
+}
+function grace_https_origin(string $origin): string {
+    return str_starts_with($origin,'http://')?(grace_normalize_origin('https://'.substr($origin,7)) ?? $origin):$origin;
+}
+function grace_origin_allowed(string $candidate, string $expected): bool {
+    $candidate=grace_normalize_origin($candidate); $expected=grace_normalize_origin($expected);
+    return $candidate!==null && $expected!==null && ($candidate===$expected || $candidate===grace_https_origin($expected));
+}
+function grace_request_https(): bool {
+    if ((!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS'])!=='off') || (string)($_SERVER['SERVER_PORT'] ?? '')==='443') return true;
+    // These signals only enable the Secure flag. They never authorize a host.
+    return strtolower(trim(explode(',',(string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]))==='https' || strtolower((string)($_SERVER['HTTP_X_FORWARDED_SSL'] ?? ''))==='on';
+}
 function grace_origin(): string {
     if (is_file(GRACE_ROOT.'/config.php')) {
-        $config = grace_config(); if (!empty($config['site_url'])) return rtrim($config['site_url'],'/');
+        $config = grace_config();
+        if (!empty($config['site_url'])) {
+            $origin=grace_normalize_origin((string)$config['site_url']);
+            if ($origin===null) grace_error('Проверьте адрес сайта в config.php.',503);
+            return $origin;
+        }
     }
-    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || ($_SERVER['SERVER_PORT'] ?? '') === '443';
-    if (in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1','::1'],true) && ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https') $https = true;
     $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
     if (!preg_match('/^[a-zA-Z0-9.\-:\[\]]+$/',$host)) grace_error('Некорректный адрес сайта.');
-    return ($https ? 'https' : 'http').'://'.$host;
+    return (grace_request_https() ? 'https' : 'http').'://'.$host;
 }
 function grace_same_origin(): void {
     $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
     $matches=true;
     if ($origin!=='') {
-        if (is_file(GRACE_ROOT.'/config.php')) $matches=rtrim($origin,'/')===grace_origin();
+        if (is_file(GRACE_ROOT.'/config.php')) $matches=grace_origin_allowed($origin,grace_origin());
         else {
             $parts=parse_url($origin);
             $host=strtolower(($parts['host'] ?? '').(isset($parts['port'])?':'.$parts['port']:''));
@@ -80,6 +108,15 @@ function grace_same_origin(): void {
         }
     }
     if (!$matches || ($_SERVER['HTTP_SEC_FETCH_SITE'] ?? '') === 'cross-site') grace_error('Недопустимый источник запроса.',403);
+}
+function grace_remember_https_origin(): void {
+    $stored=grace_origin(); $incoming=grace_normalize_origin((string)($_SERVER['HTTP_ORIGIN'] ?? ''));
+    if (!str_starts_with($stored,'http://') || $incoming!==grace_https_origin($stored)) return;
+    // Only called after successful password verification; keep every other setting.
+    $config=grace_config(); $config['site_url']=$incoming;
+    if (!is_writable(GRACE_ROOT)) return;
+    try { grace_atomic_php(GRACE_ROOT.'/config.php',$config); }
+    catch (GraceError) { error_log('Grace Models: update site_url to HTTPS in config.php.'); }
 }
 function grace_read_json(int $limit = 131072): array {
     $length = (int)($_SERVER['CONTENT_LENGTH'] ?? 0); if ($length > $limit) grace_error('Запрос слишком большой.',413);
@@ -132,7 +169,7 @@ function grace_dispatch(): never {
     $path = rawurldecode(parse_url($_SERVER['REQUEST_URI'] ?? '/',PHP_URL_PATH) ?: '/');
     $path = rtrim($path,'/') ?: '/';
     if (str_contains($path,"\0") || preg_match('#(?:^|/)\.\.(?:/|$)#',$path)) grace_not_found();
-    $assets = ['app.js'=>'text/javascript; charset=utf-8','catalog.js'=>'text/javascript; charset=utf-8','model-options.js'=>'text/javascript; charset=utf-8','cookies.js'=>'text/javascript; charset=utf-8','cookies.css'=>'text/css; charset=utf-8','legal.css'=>'text/css; charset=utf-8','style.css'=>'text/css; charset=utf-8','favicon.svg'=>'image/svg+xml','login.css'=>'text/css; charset=utf-8','login.js'=>'text/javascript; charset=utf-8','install.js'=>'text/javascript; charset=utf-8'];
+    $assets = ['app.js'=>'text/javascript; charset=utf-8','application.js'=>'text/javascript; charset=utf-8','catalog.js'=>'text/javascript; charset=utf-8','model-options.js'=>'text/javascript; charset=utf-8','cookies.js'=>'text/javascript; charset=utf-8','cookies.css'=>'text/css; charset=utf-8','legal.css'=>'text/css; charset=utf-8','style.css'=>'text/css; charset=utf-8','favicon.svg'=>'image/svg+xml','login.css'=>'text/css; charset=utf-8','login.js'=>'text/javascript; charset=utf-8','install.js'=>'text/javascript; charset=utf-8'];
     $name = ltrim($path,'/');
     if (isset($assets[$name])) grace_send_file(grace_asset_file($name),$assets[$name]);
     if (preg_match('#^/fonts/([a-zA-Z0-9._-]+\.(?:woff2|ttf))$#',$path,$font)) grace_send_file(grace_asset_file('fonts/'.$font[1]),str_ends_with($font[1],'.woff2')?'font/woff2':'font/ttf');

@@ -4,9 +4,10 @@ if (!defined('GRACE_ROOT')) { http_response_code(404); exit; }
 
 function grace_auth_version(): string { $c=grace_config(); return hash('sha256',$c['admin_login'].':'.$c['admin_hash']); }
 function grace_cookie(string $token, bool $clear = false): void {
+    $source=grace_normalize_origin((string)($_SERVER['HTTP_ORIGIN'] ?? ''));
     setcookie(GRACE_COOKIE,$clear?'':$token,[
         'expires'=>$clear?time()-3600:time()+GRACE_COOKIE_AGE,'path'=>'/',
-        'secure'=>str_starts_with(grace_origin(),'https://'),'httponly'=>true,'samesite'=>'Lax'
+        'secure'=>grace_request_https() || str_starts_with(grace_origin(),'https://') || ($source!==null && str_starts_with($source,'https://') && grace_origin_allowed($source,grace_origin())),'httponly'=>true,'samesite'=>'Lax'
     ]);
 }
 function grace_renew_cookie(string $token): void { grace_cookie($token); header('Cache-Control: private, no-store'); }
@@ -47,6 +48,7 @@ function grace_login(): never {
         grace_limiter_add($key,900); grace_error('Неверный логин или пароль.',401);
     }
     grace_query('DELETE FROM '.grace_table('request_limits').' WHERE limiter_key=?',[$key]);
+    grace_remember_https_origin();
     $token=bin2hex(random_bytes(32));
     grace_insert('admin_sessions',['token_hash'=>hash('sha256',$token),'credential_version'=>grace_auth_version(),'created_at'=>grace_now()]);
     grace_cookie($token); grace_json(['ok'=>true]);

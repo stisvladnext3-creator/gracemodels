@@ -22,6 +22,6 @@ form.addEventListener('submit',async event=>{
     location.replace(location.pathname);
   }catch(failure){
     error.textContent=failure.message==='Failed to fetch'?'Нет связи с сервером. Проверьте соединение и попробуйте снова.':failure.message;
-    button.disabled=false;label.textContent='Войти в студию';
+    button.disabled=false;label.textContent='Войти в кабинет';
   }
 });

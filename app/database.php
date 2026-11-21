@@ -28,13 +28,19 @@ function grace_database_columns(PDO $pdo, string $table, bool $mysql): array {
     $rows=$pdo->query($mysql?'SHOW COLUMNS FROM '.$table:'PRAGMA table_info('.$table.')')->fetchAll();
     return array_column($rows,$mysql?'Field':'name');
 }
+function grace_application_columns(): array {
+    return ['telegram'=>"VARCHAR(100) NOT NULL DEFAULT ''",'birth_date'=>"VARCHAR(10) NOT NULL DEFAULT ''",'bust_cup'=>"VARCHAR(3) NOT NULL DEFAULT ''",'bust'=>'INTEGER NULL','waist'=>'INTEGER NULL','hips'=>'INTEGER NULL','shoe'=>'INTEGER NULL','hair'=>"VARCHAR(30) NOT NULL DEFAULT ''",'eyes'=>"VARCHAR(30) NOT NULL DEFAULT ''",'file_link'=>"VARCHAR(1200) NOT NULL DEFAULT ''"];
+}
 
 function grace_upgrade_database(PDO $pdo, array $config): void {
     $settings=grace_table('settings',$config);
     $stored=$pdo->query("SELECT setting_value FROM $settings WHERE setting_key='schema_version'")->fetchColumn();
-    if ((int)$stored>=2) return;
+    if ((int)$stored>=GRACE_SCHEMA_VERSION) return;
     $mysql=$config['database']['driver']==='mysql';
-    foreach (['models'=>['bust_cup'=>"VARCHAR(3) NOT NULL DEFAULT ''"],'inquiries'=>['consent_version'=>"VARCHAR(40) NOT NULL DEFAULT ''",'consent_at'=>"VARCHAR(40) NOT NULL DEFAULT ''"]] as $name=>$definitions) {
+    $changes=[];
+    if ((int)$stored<2) $changes=['models'=>['bust_cup'=>"VARCHAR(3) NOT NULL DEFAULT ''"],'inquiries'=>['consent_version'=>"VARCHAR(40) NOT NULL DEFAULT ''",'consent_at'=>"VARCHAR(40) NOT NULL DEFAULT ''"]];
+    $changes['inquiries']=[...($changes['inquiries'] ?? []),...grace_application_columns()];
+    foreach ($changes as $name=>$definitions) {
         $table=grace_table($name,$config);
         foreach ($definitions as $column=>$definition) {
             if (in_array($column,grace_database_columns($pdo,$table,$mysql),true)) continue;
@@ -51,7 +57,7 @@ function grace_upgrade_database(PDO $pdo, array $config): void {
         $agency['email']='Info@grace-models.com';
         $pdo->prepare("UPDATE $settings SET setting_value=? WHERE setting_key='agency'")->execute([json_encode($agency,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)]);
     }
-    $pdo->exec("UPDATE $settings SET setting_value='2' WHERE setting_key='schema_version'");
+    $pdo->exec("UPDATE $settings SET setting_value='".GRACE_SCHEMA_VERSION."' WHERE setting_key='schema_version'");
 }
 function grace_table(string $name, ?array $config = null): string {
     $prefix = ($config ?? grace_config())['database']['prefix'];
@@ -92,6 +98,7 @@ function grace_create_schema(PDO $pdo, array $config): void {
         'admin_sessions'=>"token_hash VARCHAR(64) PRIMARY KEY, credential_version VARCHAR(64) NOT NULL, created_at VARCHAR(40) NOT NULL",
         'request_limits'=>"limiter_key VARCHAR(100) PRIMARY KEY, attempt_count INTEGER NOT NULL, expires_at BIGINT NOT NULL"
     ];
+    foreach (grace_application_columns() as $column=>$definition) $schemas['inquiries'].=', `'.$column.'` '.$definition;
     foreach ($schemas as $name=>$schema) $pdo->exec('CREATE TABLE IF NOT EXISTS '.grace_table($name,$config).' ('.$schema.')'.($mysql?' ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci':''));
 }
 function grace_seed_database(PDO $pdo, array $config, bool $demo, string $agencyName): void {
@@ -101,7 +108,7 @@ function grace_seed_database(PDO $pdo, array $config, bool $demo, string $agency
     $pdo->beginTransaction();
     try {
         grace_insert('settings',['setting_key'=>'agency','setting_value'=>json_encode($settings,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)],$pdo,$config);
-        grace_insert('settings',['setting_key'=>'schema_version','setting_value'=>'2'],$pdo,$config);
+        grace_insert('settings',['setting_key'=>'schema_version','setting_value'=>(string)GRACE_SCHEMA_VERSION],$pdo,$config);
         if ($demo) {
             foreach ($seed['models'] as $model) {
                 $model['gallery']=json_encode($model['gallery'],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
