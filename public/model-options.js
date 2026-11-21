@@ -20,4 +20,4 @@ export const eyeColors = {
 };
 
 export const bustCups = ['AA', 'A', 'B', 'C', 'D', 'DD', 'E', 'F', 'G', 'H'];
-export const consentVersion = '2026-11-21';
+export const consentVersion = '2026-11-21.1';

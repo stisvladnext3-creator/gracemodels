@@ -79,15 +79,9 @@ function grace_admin_data(bool $all = false): array {
     return ['models'=>array_map('grace_model_row',grace_rows('SELECT * FROM '.grace_table('models').' ORDER BY sort_order,created_at')),'inquiries'=>array_map('grace_inquiry_row',grace_rows('SELECT * FROM '.grace_table('inquiries').' ORDER BY created_at DESC'.($all?'':' LIMIT 2000'))),'news'=>array_map('grace_news_row',grace_rows('SELECT * FROM '.grace_table('news').' ORDER BY published_at DESC')),'activity'=>grace_rows('SELECT * FROM '.grace_table('activity').' ORDER BY created_at DESC'.($all?'':' LIMIT 40')),'settings'=>grace_settings()];
 }
 function grace_application_data(array $input): array {
-    $data=['telegram'=>grace_text($input['telegram'] ?? '',100),'city'=>grace_text($input['city'] ?? '',100),'birth_date'=>grace_text($input['birth_date'] ?? '',10)];
+    $data=['telegram'=>grace_text($input['telegram'] ?? '',100),'city'=>grace_text($input['city'] ?? '',100)];
     if ($data['city']==='' || $data['telegram']==='') grace_error('Укажите город и ник в Telegram.');
-    if ($data['birth_date']!=='') {
-        $timezone=new DateTimeZone('Europe/Moscow');
-        $birth=DateTimeImmutable::createFromFormat('!Y-m-d',$data['birth_date'],$timezone);
-        $today=new DateTimeImmutable('today',$timezone);
-        if (!$birth || $birth->format('Y-m-d')!==$data['birth_date'] || $birth>$today) grace_error('Укажите корректную дату рождения.');
-        $data['age']=$birth->diff($today)->y;
-    } else $data['age']=filter_var($input['age'] ?? null,FILTER_VALIDATE_INT);
+    $data['age']=filter_var($input['age'] ?? null,FILTER_VALIDATE_INT);
     if ($data['age']===false || $data['age']<14 || $data['age']>80) grace_error('Принимаем заявки от кандидатов от 14 до 80 лет. Проверьте возраст.');
     foreach (['height'=>['Рост',100,230],'bust'=>['Обхват груди',40,160],'waist'=>['Талия',35,160],'hips'=>['Бёдра',40,160],'shoe'=>['Размер обуви',20,55]] as $key=>[$label,$min,$max]) {
         $value=$input[$key] ?? '';

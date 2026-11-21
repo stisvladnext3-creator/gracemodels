@@ -32,4 +32,14 @@ foreach ([['HTTPS'=>'on'],['SERVER_PORT'=>'443'],['HTTP_X_FORWARDED_PROTO'=>'htt
 }
 $_SERVER=['HTTPS'=>'off','SERVER_PORT'=>'80','HTTP_X_FORWARDED_PROTO'=>'http'];
 if (grace_request_https()) throw new RuntimeException('Plain HTTP was mistaken for HTTPS.');
-echo "PASS ".count($cases)." origin cases and five transport cases\n";
+foreach ([14,15,16,17] as $age) {
+    $application=grace_application_data(['city'=>'Тест','telegram'=>'@fixture','age'=>(string)$age]);
+    if ($application['age']!==$age || $application['height']!==null) throw new RuntimeException('Numeric candidate age failed.');
+}
+foreach (['13','81','14.5',''] as $age) {
+    $rejected=false;
+    try { grace_application_data(['city'=>'Тест','telegram'=>'@fixture','age'=>$age]); }
+    catch (GraceError) { $rejected=true; }
+    if (!$rejected) throw new RuntimeException('Invalid candidate age was accepted.');
+}
+echo "PASS ".count($cases)." origin cases, five transport cases and eight numeric age cases\n";

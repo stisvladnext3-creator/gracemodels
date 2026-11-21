@@ -29,6 +29,7 @@ function grace_database_columns(PDO $pdo, string $table, bool $mysql): array {
     return array_column($rows,$mysql?'Field':'name');
 }
 function grace_application_columns(): array {
+    // Retain birth_date for existing 2.2 records; the current form only collects age.
     return ['telegram'=>"VARCHAR(100) NOT NULL DEFAULT ''",'birth_date'=>"VARCHAR(10) NOT NULL DEFAULT ''",'bust_cup'=>"VARCHAR(3) NOT NULL DEFAULT ''",'bust'=>'INTEGER NULL','waist'=>'INTEGER NULL','hips'=>'INTEGER NULL','shoe'=>'INTEGER NULL','hair'=>"VARCHAR(30) NOT NULL DEFAULT ''",'eyes'=>"VARCHAR(30) NOT NULL DEFAULT ''",'file_link'=>"VARCHAR(1200) NOT NULL DEFAULT ''"];
 }
 

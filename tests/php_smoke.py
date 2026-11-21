@@ -3,8 +3,7 @@
 No packages are required. Pass Apache's module directory and an optional
 MySQL fixture connection. Runtime credentials and files stay in a temp dir.
 """
-import argparse,base64,hashlib,http.cookiejar,json,os,re,shutil,socket,subprocess,tempfile,time,urllib.error,urllib.parse,urllib.request,datetime
-from zoneinfo import ZoneInfo
+import argparse,base64,hashlib,http.cookiejar,json,os,re,shutil,socket,subprocess,tempfile,time,urllib.error,urllib.parse,urllib.request
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
@@ -178,9 +177,9 @@ try:
     for path in ['/models','/models/alina','/about','/contacts','/become-a-model','/booking','/news','/']:
         _,page=expect(path);check('public route '+path,b'Grace Models' in page and b'FORMA' not in page)
     _,legal=expect('/privacy');legal_text=legal.decode()
-    check('full consent names the operator, address and withdrawal email',all(value in legal_text for value in ['7706548391','1047796616471','Брестская','Info@grace-models.com','10 (десяти) рабочих дней','3 (трех) лет','бронирование']))
+    check('full consent names the operator, address and withdrawal email',all(value in legal_text for value in ['7706548391','1047796616471','Брестская','Info@grace-models.com','10 (десяти) рабочих дней','3 (трех) лет','бронирование','grace-models.ru']))
     _,cookies=expect('/cookies');check('cookie policy explains actual cookies and local storage',all(value in cookies.decode() for value in ['grace_cookie_choice','grace_models_admin','forma-language','forma-shortlist','Настройки cookie']))
-    for path in ['/cookies.js','/cookies.css','/model-options.js','/application.js','/legal.css','/images/grace-models-logo.png']:expect(path)
+    for path in ['/cookies.js','/cookies.css','/model-options.js','/legal.css','/images/grace-models-logo.png']:expect(path)
     check('new public assets are accessible',True)
     for path in ['/config.php','/app/bootstrap.php','/app/seed.json','/public/admin.html','/.git/config','/backup/data.json']:
         check('blocked '+path,request(path)[0] in [403,404])
@@ -220,34 +219,29 @@ try:
     draft['cover']=photo['url'];draft['gallery']=[photo['url']];api('/api/studio/models/'+model_id,method='PUT',data=draft,cookie=cookie)
     stored=next(m for m in api('/api/public')['models'] if m['id']==model_id);check('gallery changes persist',stored['cover']==photo['url'] and stored['gallery']==[photo['url']])
     check('cup, hair, eyes and full name persist independently',stored['bust_cup']=='C' and stored['hair']=='light_brown' and stored['eyes']=='hazel' and stored['name']=='Алёна Смирнова' and stored['bust']==draft['bust'])
-    base={'name':'Тестовая заявка','email':'fixture@example.test','phone':'+70000000000','consent':'yes','consent_version':'2026-11-21','message':'Проверка PHP'}
+    base={'name':'Тестовая заявка','email':'fixture@example.test','phone':'+70000000000','consent':'yes','consent_version':'2026-11-21.1','message':'Проверка PHP'}
     upload('/api/inquiries',{**base,'kind':'booking','consent':'no'},[],status=400)
     upload('/api/inquiries',{**base,'kind':'booking','consent_version':'outdated'},[],status=409)
     check('server rejects absent consent and outdated consent text',not api('/api/studio/data',cookie=cookie)['inquiries'])
     booking=upload('/api/inquiries',{**base,'kind':'booking','model_id':model_id},[])
-    today=datetime.datetime.now(ZoneInfo('Europe/Moscow')).date()
-    def birthday(age):
-        try:return today.replace(year=today.year-age).isoformat()
-        except ValueError:return today.replace(year=today.year-age,day=28).isoformat()
-    candidate_fields={**base,'kind':'application','birth_date':birthday(14),'city':'Тест','telegram':'@fixture_candidate','height':'177','bust':'84','bust_cup':'B','waist':'61','hips':'90','shoe':'39','hair':'light_brown','eyes':'hazel','file_link':'https://files.example.test/portfolio'}
-    for required in ['name','city','telegram','birth_date','phone','email','consent']:
+    candidate_fields={**base,'kind':'application','age':'14','city':'Тест','telegram':'@fixture_candidate','height':'177','bust':'84','bust_cup':'B','waist':'61','hips':'90','shoe':'39','hair':'light_brown','eyes':'hazel','file_link':'https://files.example.test/portfolio'}
+    for required in ['name','city','telegram','age','phone','email','consent']:
         upload('/api/inquiries',{**candidate_fields,required:''},[],status=400)
-    for invalid in [{'birth_date':birthday(13)},{'birth_date':'2012-02-30'},{'shoe':'999'},{'hair':'unknown'},{'file_link':'javascript:alert(1)'}]:
+    for invalid in [{'age':'13'},{'age':'14.5'},{'shoe':'999'},{'hair':'unknown'},{'file_link':'javascript:alert(1)'}]:
         upload('/api/inquiries',{**candidate_fields,**invalid},[],status=400)
     upload('/api/inquiries',candidate_fields,[('photos[]','too-large.png','image/png',b'X'*(3*1024*1024+1))],status=400)
     check('candidate required fields, age and photo limit are enforced on server',len(api('/api/studio/data',cookie=cookie)['inquiries'])==1)
     application=upload('/api/inquiries',candidate_fields,[('photos[]','front.png','image/png',png),('photos[]','profile.png','image/png',png)])
     received=api('/api/studio/data',cookie=cookie)['inquiries'];candidate=next(i for i in received if i['id']==application['id'])
     check('booking and candidate inquiries are stored',len(received)==2 and len(candidate['attachments'])==2)
-    check('14-year-old candidate has all form fields saved',candidate['age']==14 and candidate['birth_date']==birthday(14) and candidate['telegram']=='@fixture_candidate' and all(candidate[key]==int(candidate_fields[key]) for key in ['height','bust','waist','hips','shoe']) and all(candidate[key]==candidate_fields[key] for key in ['bust_cup','hair','eyes','file_link']))
+    check('14-year-old candidate has all form fields saved',candidate['age']==14 and candidate['birth_date']=='' and candidate['telegram']=='@fixture_candidate' and all(candidate[key]==int(candidate_fields[key]) for key in ['height','bust','waist','hips','shoe']) and all(candidate[key]==candidate_fields[key] for key in ['bust_cup','hair','eyes','file_link']))
     for age in [15,16,17]:
-        values={**base,'kind':'application','city':'Тест','telegram':'@fixture_candidate','birth_date':birthday(age)}
-        if age==17:values['birth_date']='';values['age']='17'
+        values={**base,'kind':'application','city':'Тест','telegram':'@fixture_candidate','age':str(age)}
         accepted=upload('/api/inquiries',values,[])
         stored_candidate=next(i for i in api('/api/studio/data',cookie=cookie)['inquiries'] if i['id']==accepted['id'])
         check('candidate age '+str(age)+' is accepted without optional measurements',stored_candidate['age']==age and stored_candidate['height'] is None and stored_candidate['bust'] is None)
         api('/api/studio/inquiries/'+accepted['id'],method='DELETE',cookie=cookie)
-    check('consent version and acceptance time are recorded',all(i['consent'] and i['consent_version']=='2026-11-21' and i['consent_at']==i['created_at'] for i in received))
+    check('consent version and acceptance time are recorded',all(i['consent'] and i['consent_version']=='2026-11-21.1' and i['consent_at']==i['created_at'] for i in received))
     api('/api/studio/settings',method='PUT',data={'applications_enabled':False},cookie=cookie)
     check('applications setting is a stored boolean',api('/api/public')['settings']['applications_enabled'] is False)
     upload('/api/inquiries',{**base,'kind':'application','age':'21','height':'177'},[],status=403)
@@ -260,7 +254,7 @@ try:
     expect(private_path,status=401);expect('/media/'+key,status=404)
     headers,attachment=expect(private_path,cookie=cookie);check('candidate files stay private and downloadable',attachment==png and 'attachment;' in headers.get('Content-Disposition',''))
     api('/api/studio/inquiries/'+application['id'],method='PUT',data={'status':'review','internal_note':'Заметка только команды'},cookie=cookie)
-    public_text=json.dumps(api('/api/public'),ensure_ascii=False);check('public API does not reveal contacts or notes',all(value not in public_text for value in ['fixture@example.test','Заметка только команды','@fixture_candidate','files.example.test/portfolio',birthday(14)]))
+    public_text=json.dumps(api('/api/public'),ensure_ascii=False);check('public API does not reveal contacts or notes',all(value not in public_text for value in ['fixture@example.test','Заметка только команды','@fixture_candidate','files.example.test/portfolio']))
     def parallel_booking(number):return upload('/api/inquiries',{**base,'kind':'booking','company':'Concurrent '+str(number)},[])
     with ThreadPoolExecutor(max_workers=4) as pool:parallel=list(pool.map(parallel_booking,range(4)))
     check('concurrent submissions are not lost',len(api('/api/studio/data',cookie=cookie)['inquiries'])==6)

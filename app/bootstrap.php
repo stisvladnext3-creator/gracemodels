@@ -2,9 +2,9 @@
 declare(strict_types=1);
 if (!defined('GRACE_ROOT')) { http_response_code(404); exit; }
 
-const GRACE_VERSION = '2.2.0';
+const GRACE_VERSION = '2.2.1';
 const GRACE_SCHEMA_VERSION = 3;
-const GRACE_CONSENT_VERSION = '2026-11-21';
+const GRACE_CONSENT_VERSION = '2026-11-21.1';
 const GRACE_COOKIE = 'grace_models_admin';
 const GRACE_COOKIE_AGE = 34560000;
 
@@ -169,7 +169,7 @@ function grace_dispatch(): never {
     $path = rawurldecode(parse_url($_SERVER['REQUEST_URI'] ?? '/',PHP_URL_PATH) ?: '/');
     $path = rtrim($path,'/') ?: '/';
     if (str_contains($path,"\0") || preg_match('#(?:^|/)\.\.(?:/|$)#',$path)) grace_not_found();
-    $assets = ['app.js'=>'text/javascript; charset=utf-8','application.js'=>'text/javascript; charset=utf-8','catalog.js'=>'text/javascript; charset=utf-8','model-options.js'=>'text/javascript; charset=utf-8','cookies.js'=>'text/javascript; charset=utf-8','cookies.css'=>'text/css; charset=utf-8','legal.css'=>'text/css; charset=utf-8','style.css'=>'text/css; charset=utf-8','favicon.svg'=>'image/svg+xml','login.css'=>'text/css; charset=utf-8','login.js'=>'text/javascript; charset=utf-8','install.js'=>'text/javascript; charset=utf-8'];
+    $assets = ['app.js'=>'text/javascript; charset=utf-8','catalog.js'=>'text/javascript; charset=utf-8','model-options.js'=>'text/javascript; charset=utf-8','cookies.js'=>'text/javascript; charset=utf-8','cookies.css'=>'text/css; charset=utf-8','legal.css'=>'text/css; charset=utf-8','style.css'=>'text/css; charset=utf-8','favicon.svg'=>'image/svg+xml','login.css'=>'text/css; charset=utf-8','login.js'=>'text/javascript; charset=utf-8','install.js'=>'text/javascript; charset=utf-8'];
     $name = ltrim($path,'/');
     if (isset($assets[$name])) grace_send_file(grace_asset_file($name),$assets[$name]);
     if (preg_match('#^/fonts/([a-zA-Z0-9._-]+\.(?:woff2|ttf))$#',$path,$font)) grace_send_file(grace_asset_file('fonts/'.$font[1]),str_ends_with($font[1],'.woff2')?'font/woff2':'font/ttf');
