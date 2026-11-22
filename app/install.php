@@ -6,7 +6,7 @@ function grace_install_page(): never {
     if (is_file(GRACE_ROOT.'/config.php')) grace_not_found();
     header('X-Robots-Tag: noindex, nofollow');
     $drivers=class_exists('PDO')?PDO::getAvailableDrivers():[];
-    $requirements=['PHP 8.1 или новее'=>PHP_VERSION_ID>=80100,'PDO: MySQL или SQLite'=>(in_array('mysql',$drivers,true)||in_array('sqlite',$drivers,true)),'Проверка типов файлов (Fileinfo)'=>extension_loaded('fileinfo'),'Запись настроек PHP'=>is_writable(GRACE_ROOT)];
+    $requirements=['PHP 8.1 или новее'=>PHP_VERSION_ID>=80100,'PDO: MySQL или SQLite'=>(in_array('mysql',$drivers,true)||in_array('sqlite',$drivers,true)),'Проверка типов файлов (Fileinfo)'=>extension_loaded('fileinfo'),'Отправка писем (Ctype)'=>extension_loaded('ctype'),'Запись настроек PHP'=>is_writable(GRACE_ROOT)];
     $ready=!in_array(false,$requirements,true); $failure='';
     $keyFile=GRACE_ROOT.'/install-key.php';
     if (!is_file($keyFile) && is_writable(GRACE_ROOT)) {

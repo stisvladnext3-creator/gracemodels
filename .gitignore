@@ -13,3 +13,5 @@ outputs/
 *.sqlite-shm
 *.sqlite-wal
 /php-build/
+
+__pycache__/

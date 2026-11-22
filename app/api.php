@@ -73,10 +73,10 @@ function grace_put_upload(array $file, string $prefix, bool $allowPdf = false): 
     return ['key'=>$key,'name'=>grace_text(basename((string)$file['name']),160),'type'=>$mime,'size'=>(int)$file['size']];
 }
 function grace_public_data(): array {
-    return ['models'=>array_map('grace_model_row',grace_rows('SELECT * FROM '.grace_table('models').' WHERE published=1 ORDER BY sort_order,created_at')),'news'=>array_map('grace_news_row',grace_rows('SELECT * FROM '.grace_table('news').' WHERE published=1 ORDER BY published_at DESC')),'settings'=>grace_settings()];
+    return ['models'=>array_map('grace_model_row',grace_rows('SELECT * FROM '.grace_table('models').' WHERE published=1 ORDER BY sort_order,created_at')),'news'=>array_map('grace_news_row',grace_rows('SELECT * FROM '.grace_table('news').' WHERE published=1 ORDER BY published_at DESC')),'settings'=>grace_settings(),'documents'=>grace_legal_metadata()];
 }
 function grace_admin_data(bool $all = false): array {
-    return ['models'=>array_map('grace_model_row',grace_rows('SELECT * FROM '.grace_table('models').' ORDER BY sort_order,created_at')),'inquiries'=>array_map('grace_inquiry_row',grace_rows('SELECT * FROM '.grace_table('inquiries').' ORDER BY created_at DESC'.($all?'':' LIMIT 2000'))),'news'=>array_map('grace_news_row',grace_rows('SELECT * FROM '.grace_table('news').' ORDER BY published_at DESC')),'activity'=>grace_rows('SELECT * FROM '.grace_table('activity').' ORDER BY created_at DESC'.($all?'':' LIMIT 40')),'settings'=>grace_settings()];
+    return ['models'=>array_map('grace_model_row',grace_rows('SELECT * FROM '.grace_table('models').' ORDER BY sort_order,created_at')),'inquiries'=>grace_inquiries_with_legal(grace_inquiries_with_mail(array_map('grace_inquiry_row',grace_rows('SELECT * FROM '.grace_table('inquiries').' ORDER BY created_at DESC'.($all?'':' LIMIT 2000'))))),'news'=>array_map('grace_news_row',grace_rows('SELECT * FROM '.grace_table('news').' ORDER BY published_at DESC')),'activity'=>grace_rows('SELECT * FROM '.grace_table('activity').' ORDER BY created_at DESC'.($all?'':' LIMIT 40')),'settings'=>grace_settings(),'documents'=>grace_legal_admin($all)];
 }
 function grace_application_data(array $input): array {
     $data=['telegram'=>grace_text($input['telegram'] ?? '',100),'city'=>grace_text($input['city'] ?? '',100)];
@@ -111,7 +111,8 @@ function grace_create_inquiry(): never {
     $name=grace_text($input['name'] ?? '',100); $email=strtolower(grace_text($input['email'] ?? '',200)); $phone=grace_text($input['phone'] ?? '',60);
     if ($name==='' || !filter_var($email,FILTER_VALIDATE_EMAIL) || $phone==='') grace_error('Укажите имя, телефон и корректный email.');
     if (($input['consent'] ?? '')!=='yes') grace_error('Нужно согласие на обработку данных.');
-    if (($input['consent_version'] ?? '')!==GRACE_CONSENT_VERSION) grace_error('Текст согласия обновился. Обновите страницу и подтвердите согласие еще раз.',409);
+    $consentVersion=grace_legal_document('consent')['version'];
+    if (($input['consent_version'] ?? '')!==$consentVersion) grace_error('Текст согласия обновился. Обновите страницу и подтвердите согласие еще раз.',409);
     $application=$kind==='application'?grace_application_data($input):[];
     $modelId=grace_text($input['model_id'] ?? '',100); $modelName='';
     if ($modelId!=='') { $model=grace_first('SELECT name FROM '.grace_table('models').' WHERE id=? AND published=1',[$modelId]); if (!$model) grace_error('Анкета модели недоступна. Выберите другую модель.'); $modelName=$model['name']; }
@@ -119,24 +120,31 @@ function grace_create_inquiry(): never {
     if ($kind==='application' && array_filter($files,fn($file)=>(int)$file['size']>3*1024*1024)) grace_error('Одна фотография — не более 3 МБ.');
     if (count($files)>3 || array_sum(array_column($files,'size'))>15*1024*1024) grace_error('Добавьте не более 3 файлов, до 5 МБ каждый.');
     $limitKey=grace_limiter_key('inquiry'); grace_limiter_check($limitKey,12); grace_limiter_add($limitKey,3600);
-    $id=grace_id(); $attachments=[];
+    $id=grace_id(); $attachments=[]; $pdo=grace_db();
     try {
         foreach ($files as $file) $attachments[]=grace_put_upload($file,'private/inquiries/'.$id,$kind!=='application');
         $acceptedAt=grace_now();
-        grace_insert('inquiries',['id'=>$id,'kind'=>$kind,'name'=>$name,'email'=>$email,'phone'=>$phone,'city'=>grace_text($input['city'] ?? '',100),'age'=>null,'height'=>null,...$application,'instagram'=>grace_text($input['instagram'] ?? '',200),'model_id'=>$modelId,'model_name'=>$modelName,'company'=>grace_text($input['company'] ?? '',200),'shooting_date'=>grace_text($input['shooting_date'] ?? '',40),'message'=>grace_text($input['message'] ?? '',5000),'attachments'=>json_encode($attachments,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),'status'=>'new','internal_note'=>'','consent'=>1,'consent_version'=>GRACE_CONSENT_VERSION,'consent_at'=>$acceptedAt,'created_at'=>$acceptedAt,'updated_at'=>$acceptedAt]);
-    } catch (Throwable $exception) { foreach ($attachments as $file) @unlink(grace_file_path($file['key'])); throw $exception; }
+        $pdo->beginTransaction();
+        grace_insert('inquiries',['id'=>$id,'kind'=>$kind,'name'=>$name,'email'=>$email,'phone'=>$phone,'city'=>grace_text($input['city'] ?? '',100),'age'=>null,'height'=>null,...$application,'instagram'=>grace_text($input['instagram'] ?? '',200),'model_id'=>$modelId,'model_name'=>$modelName,'company'=>grace_text($input['company'] ?? '',200),'shooting_date'=>grace_text($input['shooting_date'] ?? '',40),'message'=>grace_text($input['message'] ?? '',5000),'attachments'=>json_encode($attachments,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),'status'=>'new','internal_note'=>'','consent'=>1,'consent_version'=>$consentVersion,'consent_at'=>$acceptedAt,'created_at'=>$acceptedAt,'updated_at'=>$acceptedAt]);
+        grace_enqueue_mail($id,$kind,$pdo,grace_config());
+        $pdo->commit();
+    } catch (Throwable $exception) { if ($pdo->inTransaction()) $pdo->rollBack(); foreach ($attachments as $file) @unlink(grace_file_path($file['key'])); throw $exception; }
+    grace_mail_after_response($id);
     grace_json(['ok'=>true,'id'=>$id,'reference'=>strtoupper(substr($id,0,8))],201);
 }
 function grace_api(string $path): never {
     $method=$_SERVER['REQUEST_METHOD'] ?? 'GET';
     if ($path==='/api/public' && $method==='GET') grace_json(grace_public_data());
+    if ($path==='/api/documents' && $method==='GET') grace_json(grace_legal_metadata());
     if ($path==='/api/inquiries' && $method==='POST') grace_create_inquiry();
     if ($path==='/api/studio/login' && $method==='POST') grace_login();
     if ($path==='/api/studio/logout' && $method==='POST') grace_logout();
     if (!str_starts_with($path,'/api/studio/')) grace_error('Не найдено.',404);
     $session=grace_require_admin(); if ($method!=='GET') grace_same_origin();
     $parts=explode('/',substr($path,12)); $resource=$parts[0] ?? ''; $id=implode('/',array_slice($parts,1));
-    if ($resource==='data' && $method==='GET') grace_json([...grace_admin_data(),'user'=>['login'=>$session['login']]]);
+    if ($resource==='data' && $method==='GET') { grace_mail_after_response(); grace_json([...grace_admin_data(),'user'=>['login'=>$session['login']]]); }
+    if ($resource==='notifications' && $method==='POST' && preg_match('#^([a-f0-9-]{36})/retry$#',$id,$match)) grace_json(grace_retry_inquiry_mail($match[1]));
+    if ($resource==='documents' && $method==='PUT') grace_json(grace_publish_legal($id,grace_read_json(262144)));
     if ($resource==='export' && $method==='GET') {
         header('Content-Disposition: attachment; filename="grace-models-backup-'.gmdate('Y-m-d').'.json"'); grace_json(['version'=>GRACE_VERSION,'exported_at'=>grace_now(),...grace_admin_data(true)]);
     }
@@ -158,6 +166,7 @@ function grace_api(string $path): never {
     if ($resource==='inquiries' && $method==='DELETE') {
         $row=grace_first('SELECT attachments FROM '.grace_table('inquiries').' WHERE id=?',[$id]); if (!$row) grace_error('Заявка не найдена.',404);
         grace_query('DELETE FROM '.grace_table('inquiries').' WHERE id=?',[$id]);
+        grace_query('DELETE FROM '.grace_table('mail_queue').' WHERE inquiry_id=?',[$id]);
         foreach (json_decode($row['attachments'],true,64,JSON_THROW_ON_ERROR) as $file) @unlink(grace_file_path($file['key']));
         grace_audit('Заявка удалена',substr($id,0,8)); grace_json(['ok'=>true]);
     }
@@ -172,7 +181,7 @@ function grace_api(string $path): never {
     if ($resource==='settings' && $method==='PUT') {
         $input=grace_read_json(); $settings=grace_settings();
         foreach (array_keys(grace_seed()['settings']) as $key) if (array_key_exists($key,$input)) {
-            if (in_array($key,['demo_mode','applications_enabled'],true)) $settings[$key]=(bool)filter_var($input[$key],FILTER_VALIDATE_BOOLEAN);
+            if (in_array($key,['demo_mode','applications_enabled','news_enabled'],true)) $settings[$key]=(bool)filter_var($input[$key],FILTER_VALIDATE_BOOLEAN);
             elseif (str_starts_with($key,'hero_')) $settings[$key]=grace_media_url($input[$key]);
             elseif (in_array($key,['telegram','instagram','vk'],true)) $settings[$key]=str_starts_with(grace_text($input[$key],500),'https://') && filter_var($input[$key],FILTER_VALIDATE_URL)?grace_text($input[$key],500):'';
             else $settings[$key]=grace_text($input[$key],str_starts_with($key,'about')?10000:500);

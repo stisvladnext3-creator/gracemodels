@@ -18,7 +18,8 @@
     "hero_image": "/images/woman-02.jpg",
     "hero_secondary": "/images/man-04.jpg",
     "demo_mode": true,
-    "applications_enabled": true
+    "applications_enabled": true,
+    "news_enabled": true
   },
   "models": [
     {

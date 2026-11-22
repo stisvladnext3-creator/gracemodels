@@ -40,7 +40,7 @@ function grace_upgrade_database(PDO $pdo, array $config): void {
     $mysql=$config['database']['driver']==='mysql';
     $changes=[];
     if ((int)$stored<2) $changes=['models'=>['bust_cup'=>"VARCHAR(3) NOT NULL DEFAULT ''"],'inquiries'=>['consent_version'=>"VARCHAR(40) NOT NULL DEFAULT ''",'consent_at'=>"VARCHAR(40) NOT NULL DEFAULT ''"]];
-    $changes['inquiries']=[...($changes['inquiries'] ?? []),...grace_application_columns()];
+    if ((int)$stored<3) $changes['inquiries']=[...($changes['inquiries'] ?? []),...grace_application_columns()];
     foreach ($changes as $name=>$definitions) {
         $table=grace_table($name,$config);
         foreach ($definitions as $column=>$definition) {
@@ -52,6 +52,9 @@ function grace_upgrade_database(PDO $pdo, array $config): void {
             }
         }
     }
+    grace_mail_schema($pdo,$config);
+    grace_legal_schema($pdo,$config);
+    grace_seed_legal($pdo,$config);
     $statement=$pdo->query("SELECT setting_value FROM $settings WHERE setting_key='agency'");
     $agency=json_decode((string)$statement->fetchColumn(),true,64,JSON_THROW_ON_ERROR);
     if (is_array($agency) && in_array($agency['email'] ?? '',['','hello@example.com','info@example.com'],true)) {
@@ -85,7 +88,7 @@ function grace_setting(string $key): mixed {
 function grace_save_setting(string $key, mixed $value): void {
     grace_query('UPDATE '.grace_table('settings').' SET setting_value=? WHERE setting_key=?',[json_encode($value,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),$key]);
 }
-function grace_settings(): array { return ['applications_enabled'=>true,...(grace_setting('agency') ?? grace_seed()['settings'])]; }
+function grace_settings(): array { return ['applications_enabled'=>true,'news_enabled'=>true,...(grace_setting('agency') ?? grace_seed()['settings'])]; }
 function grace_seed(): array { static $seed; return $seed ??= json_decode((string)file_get_contents(GRACE_ROOT.'/app/seed.json'),true,64,JSON_THROW_ON_ERROR); }
 function grace_audit(string $action, string $subject): void { grace_insert('activity',['id'=>grace_id(),'action'=>$action,'subject'=>grace_text($subject,180),'created_at'=>grace_now()]); }
 function grace_create_schema(PDO $pdo, array $config): void {
@@ -101,6 +104,8 @@ function grace_create_schema(PDO $pdo, array $config): void {
     ];
     foreach (grace_application_columns() as $column=>$definition) $schemas['inquiries'].=', `'.$column.'` '.$definition;
     foreach ($schemas as $name=>$schema) $pdo->exec('CREATE TABLE IF NOT EXISTS '.grace_table($name,$config).' ('.$schema.')'.($mysql?' ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci':''));
+    grace_mail_schema($pdo,$config);
+    grace_legal_schema($pdo,$config);
 }
 function grace_seed_database(PDO $pdo, array $config, bool $demo, string $agencyName): void {
     $seed=grace_seed(); $settings=$seed['settings']; $settings['name']=$agencyName;
@@ -110,6 +115,7 @@ function grace_seed_database(PDO $pdo, array $config, bool $demo, string $agency
     try {
         grace_insert('settings',['setting_key'=>'agency','setting_value'=>json_encode($settings,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)],$pdo,$config);
         grace_insert('settings',['setting_key'=>'schema_version','setting_value'=>(string)GRACE_SCHEMA_VERSION],$pdo,$config);
+        grace_seed_legal($pdo,$config);
         if ($demo) {
             foreach ($seed['models'] as $model) {
                 $model['gallery']=json_encode($model['gallery'],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);

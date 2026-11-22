@@ -2,8 +2,8 @@
 declare(strict_types=1);
 if (!defined('GRACE_ROOT')) { http_response_code(404); exit; }
 
-const GRACE_VERSION = '2.2.1';
-const GRACE_SCHEMA_VERSION = 3;
+const GRACE_VERSION = '2.3.0';
+const GRACE_SCHEMA_VERSION = 5;
 const GRACE_CONSENT_VERSION = '2026-11-21.1';
 const GRACE_COOKIE = 'grace_models_admin';
 const GRACE_COOKIE_AGE = 34560000;
@@ -162,6 +162,8 @@ function grace_asset_file(string $relative): string {
 
 require_once GRACE_ROOT.'/app/database.php';
 require_once GRACE_ROOT.'/app/auth.php';
+require_once GRACE_ROOT.'/app/mail.php';
+require_once GRACE_ROOT.'/app/legal.php';
 require_once GRACE_ROOT.'/app/install.php';
 require_once GRACE_ROOT.'/app/api.php';
 
@@ -178,7 +180,8 @@ function grace_dispatch(): never {
         grace_send_file(grace_asset_file('images/'.$matches[1]),['jpg'=>'image/jpeg','jpeg'=>'image/jpeg','png'=>'image/png','webp'=>'image/webp'][$extension]);
     }
     if ($path === '/install.php') grace_install_page();
-    if (in_array($path, ['/privacy','/consent'], true)) grace_template('privacy.html');
+    if ($path==='/consent') grace_legal_page('consent');
+    if ($path==='/privacy') grace_legal_page('privacy');
     if ($path === '/cookies') grace_template('cookies.html');
     if ($path === '/robots.txt') { header('Content-Type: text/plain'); echo "User-agent: *\nDisallow: /s/\nDisallow: /api/\nDisallow: /app/\nDisallow: /public/\n"; exit; }
     if (!is_file(GRACE_ROOT.'/config.php')) {
