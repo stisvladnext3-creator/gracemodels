@@ -9,10 +9,11 @@
   <link rel="stylesheet" href="/legal.css">
   <link rel="stylesheet" href="/cookies.css">
   <script type="module" src="/cookies.js"></script>
+  <link rel="stylesheet" href="/chrome.css">
 </head>
 <body>
-  <header class="legal-header"><a href="/" aria-label="Grace Models — главная"><img src="/images/grace-models-logo.png" alt="Grace Models" width="291" height="128"></a><a href="/">На главную</a></header>
+  <header class="legal-header"><a href="/" aria-label="Grace Models — главная">{{SITE_LOGO}}</a><a href="/">На главную</a></header>
   <main class="legal-document" data-version="{{VERSION}}"><p class="legal-version">Редакция от {{UPDATED}}</p><h1>{{TITLE}}</h1>{{BODY}}</main>
-  <footer class="legal-footer"><div>© Grace Models · ООО «Грейс Модельс»<br>ИНН: 7706548391 · ОГРН: 1047796616471</div><nav aria-label="Правовые документы"><a href="/consent">Согласие на обработку данных</a><a href="/privacy">Политика конфиденциальности</a><a href="/cookies">Файлы cookie</a><a href="mailto:Info@grace-models.com">Info@grace-models.com</a><button type="button" class="cookie-settings-link" data-cookie-settings>Настройки cookie</button></nav></footer>
+  {{SITE_FOOTER}}
 </body>
 </html>

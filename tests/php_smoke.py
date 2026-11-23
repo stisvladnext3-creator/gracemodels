@@ -143,7 +143,9 @@ try:
         check('upgrade adds candidate fields without inventing data',old['telegram']=='' and old['birth_date']=='' and old['bust'] is None and old['file_link']=='')
         check('upgrade preserves hosting credentials and admin URL',(site/'config.php').read_bytes()==saved_config)
         check('new fields appear after automatic migration',all('bust_cup' in m for m in after['models']))
+        check('upgrade does not invent minor confirmations or custom answers',old['guardian_consent'] is None and not old['custom_data'])
         api('/api/studio/inquiries/'+legacy['id'],method='DELETE',cookie=previous_cookie)
+        for captured in mail_directory.glob('*.eml'):captured.unlink()
     check('installer locks after setup',request('/install.php')[0]==404)
     check('private files are outside document root',(temporary/'private-data').is_dir() and not (site/'private-data').exists())
     public=api('/api/public');check('Grace Models name and demo catalogue load',public['settings']['name']=='Grace Models' and len(public['models'])==12)
@@ -190,16 +192,16 @@ try:
     for path in ['/models','/models/alina','/about','/contacts','/become-a-model','/booking','/news','/']:
         _,page=expect(path);check('public route '+path,b'Grace Models' in page and b'FORMA' not in page)
     _,legal=expect('/consent');legal_text=legal.decode()
-    check('full consent names the operator, address and withdrawal email',all(value in legal_text for value in ['7706548391','1047796616471','Брестская','Info@grace-models.com','10 (десяти) рабочих дней','3 (трех) лет','бронирование','grace-models.ru']))
-    _,policy=expect('/privacy');check('privacy policy is separate from consent',b'privacy-' in policy and 'Политика конфиденциальности'.encode() in policy and b'href="/consent"' in policy)
+    check('full consent names the operator, address and withdrawal email',all(value in legal_text for value in ['7706548391','1047796616471','Брестская','info@grace-models.ru','10 (десяти) рабочих дней','3 (трех) лет','бронирование','grace-models.ru']))
+    _,policy=expect('/privacy');check('privacy policy is separate from consent','Политика конфиденциальности'.encode() in policy and b'href="/consent"' in policy)
     _,cookies=expect('/cookies');check('cookie policy explains actual cookies and local storage',all(value in cookies.decode() for value in ['grace_cookie_choice','grace_models_admin','forma-language','forma-shortlist','Настройки cookie']))
-    for path in ['/cookies.js','/cookies.css','/model-options.js','/legal.css','/images/grace-models-logo.png']:expect(path)
+    for path in ['/cookies.js','/cookies.css','/model-options.js','/legal.css','/images/grace-models-logo-original.jpg','/form-fields.js','/chrome.css']:expect(path)
     check('new public assets are accessible',True)
-    for path in ['/config.php','/app/bootstrap.php','/app/seed.json','/app/mail.php','/tools/send-notifications.php','/public/admin.html','/.git/config','/backup/data.json']:
+    for path in ['/config.php','/app/bootstrap.php','/app/seed.json','/app/mail.php','/app/site-editor.php','/tools/send-notifications.php','/public/admin.html','/.git/config','/backup/data.json']:
         check('blocked '+path,request(path)[0] in [403,404])
-    expect('/api/studio/data',status=401);expect('/admin.js',status=401);expect('/api/studio/documents/consent',method='PUT',data={'title':'Unauthorized'},status=401)
+    expect('/api/studio/data',status=401);expect('/admin.js',status=401);expect('/site-editor.js',status=401);expect('/api/studio/documents/consent',method='PUT',data={'title':'Unauthorized'},status=401)
     _,login_page=expect(admin_path);check('hidden page displays password login',b'login-form' in login_page)
-    check('login page includes company requisites and consent link',all(value in login_page.decode() for value in ['7706548391','1047796616471','Брестская','Info@grace-models.com','href="/privacy"','href="/consent"']))
+    check('login page includes company requisites and consent link',all(value in login_page.decode() for value in ['7706548391','1047796616471','Брестская','info@grace-models.ru','href="/privacy"','href="/consent"']))
     expect('/api/studio/login',status=401,method='POST',data={'login':admin,'password':'incorrect'})
     headers,_=expect('/api/studio/login',method='POST',data={'login':admin,'password':password})
     cookie=headers['Set-Cookie'].split(';')[0]
@@ -229,23 +231,28 @@ try:
     expect('/api/studio/models',method='POST',data={**draft,'slug':'invalid-cup','bust_cup':'ZZ'},cookie=cookie,status=400)
     photo=upload('/api/studio/upload',{},[('file','portrait.png','image/png',png)],cookie)
     _,image=expect(photo['url']);check('uploaded image is served correctly',image==png)
+    original_settings=api('/api/public')['settings']
+    api('/api/studio/settings',method='PUT',cookie=cookie,data={'about_image':photo['url'],'logo_url':photo['url']})
+    revised_settings=api('/api/public')
+    check('about image and logo can be changed independently of home photos',revised_settings['settings']['about_image']==photo['url'] and revised_settings['settings']['hero_image']==original_settings['hero_image'] and photo['url'] in revised_settings['chrome']['logo'])
+    api('/api/studio/settings',method='PUT',cookie=cookie,data={'logo_url':'/images/grace-models-logo-original.jpg'})
     upload('/api/studio/upload',{},[('file','evil.jpg','image/jpeg',b'<?php echo 1;')],cookie,status=400)
     draft['cover']=photo['url'];draft['gallery']=[photo['url']];api('/api/studio/models/'+model_id,method='PUT',data=draft,cookie=cookie)
     stored=next(m for m in api('/api/public')['models'] if m['id']==model_id);check('gallery changes persist',stored['cover']==photo['url'] and stored['gallery']==[photo['url']])
     check('cup, hair, eyes and full name persist independently',stored['bust_cup']=='C' and stored['hair']=='light_brown' and stored['eyes']=='hazel' and stored['name']=='Алёна Смирнова' and stored['bust']==draft['bust'])
-    base={'name':'Тестовая заявка','email':'fixture@example.test','phone':'+70000000000','consent':'yes','consent_version':'2026-11-21.1','message':'Проверка PHP'}
+    base={'name':'Тестовая заявка','email':'fixture@example.test','phone':'+70000000000','consent':'yes','consent_version':api('/api/public')['documents']['consent']['version'],'message':'Проверка PHP'}
     upload('/api/inquiries',{**base,'kind':'booking','consent':'no'},[],status=400)
     upload('/api/inquiries',{**base,'kind':'booking','consent_version':'outdated'},[],status=409)
     check('server rejects absent consent and outdated consent text',not api('/api/studio/data',cookie=cookie)['inquiries'])
     booking=upload('/api/inquiries',{**base,'kind':'booking','model_id':model_id,'company':'Fixture Brand','shooting_date':'2026-12-01'},[])
-    candidate_fields={**base,'kind':'application','age':'14','city':'Тест','telegram':'@fixture_candidate','height':'177','bust':'84','bust_cup':'B','waist':'61','hips':'90','shoe':'39','hair':'light_brown','eyes':'hazel','file_link':'https://files.example.test/portfolio'}
-    for required in ['name','city','telegram','age','phone','email','consent']:
+    candidate_fields={**base,'kind':'application','age':'14','guardian_consent':'yes','city':'Тест','telegram':'@fixture_candidate','height':'177','bust':'84','bust_cup':'B','waist':'61','hips':'90','shoe':'39','hair':'light_brown','eyes':'hazel','file_link':'https://files.example.test/portfolio'}
+    for required in ['name','city','telegram','age','phone','email','consent','guardian_consent']:
         upload('/api/inquiries',{**candidate_fields,required:''},[],status=400)
     for invalid in [{'age':'13'},{'age':'14.5'},{'shoe':'999'},{'hair':'unknown'},{'file_link':'javascript:alert(1)'}]:
         upload('/api/inquiries',{**candidate_fields,**invalid},[],status=400)
     upload('/api/inquiries',candidate_fields,[('photos[]','too-large.png','image/png',b'X'*(3*1024*1024+1))],status=400)
     check('candidate required fields, age and photo limit are enforced on server',len(api('/api/studio/data',cookie=cookie)['inquiries'])==1)
-    check('booking email goes only to the requested mailbox',[str(message['To']).lower() for message in mail_messages()]==['gracemodelsmoscow@gmail.com'])
+    check('booking email goes to the prior and new mailboxes',sorted(str(message['To']).lower() for message in mail_messages())==sorted(['gracemodelsmoscow@gmail.com','info@grace-models.ru']))
     booking_message=mail_messages()[0]
     booking_text='\n'.join(part.get_content() for part in booking_message.walk() if part.get_content_type()=='text/plain')
     check('booking email contains the complete submitted form',all(value in booking_text for value in [base['name'],base['email'],base['phone'],base['message'],draft['name'],'Бренд / компания: Fixture Brand','Дата съёмки: 2026-12-01']))
@@ -254,28 +261,28 @@ try:
     received=api('/api/studio/data',cookie=cookie)['inquiries'];candidate=next(i for i in received if i['id']==application['id'])
     check('booking and candidate inquiries are stored',len(received)==2 and len(candidate['attachments'])==2)
     check('14-year-old candidate has all form fields saved',candidate['age']==14 and candidate['birth_date']=='' and candidate['telegram']=='@fixture_candidate' and all(candidate[key]==int(candidate_fields[key]) for key in ['height','bust','waist','hips','shoe']) and all(candidate[key]==candidate_fields[key] for key in ['bust_cup','hair','eyes','file_link']))
-    check('mail failure preserves the accepted application and all attachments',len(candidate['notifications'])==3 and all(mail['status']=='retry' for mail in candidate['notifications']) and len(mail_messages())==1)
+    check('mail failure preserves the accepted application and all attachments',len(candidate['notifications'])==4 and all(mail['status']=='retry' for mail in candidate['notifications']) and len(mail_messages())==2)
     (mail_directory/'fail').unlink()
     set_mail({'transport':'smtp','host':'127.0.0.1','port':smtp_fixture.server_address[1],'encryption':'none','password':'fixture-smtp-password-not-for-export'})
     result=api('/api/studio/notifications/'+application['id']+'/retry',method='POST',cookie=cookie,data={})
-    check('failed mail can be retried through SMTP',result['sent']==3 and result['failed']==0)
+    check('failed mail can be retried through SMTP',result['sent']==4 and result['failed']==0)
     application_messages=[message for message in mail_messages() if 'Анкета модели' in str(message['Subject'])]
-    check('full candidate mail reaches all three requested recipients',sorted(str(message['To']).lower() for message in application_messages)==sorted(['Info@grace-models.com'.lower(),'gracemodelsmail@gmail.com','gracemodelsmoscow@gmail.com']))
+    check('full candidate mail reaches the three prior recipients plus the new one',sorted(str(message['To']).lower() for message in application_messages)==sorted(['Info@grace-models.com'.lower(),'gracemodelsmail@gmail.com','gracemodelsmoscow@gmail.com','info@grace-models.ru']))
     for message in application_messages:
         text='\n'.join(part.get_content() for part in message.walk() if part.get_content_type()=='text/plain')
-        check('candidate email includes all fields and original photos',all(value in text for value in ['Ник в Телеграм: @fixture_candidate','Город: Тест','Рост, см: 177','Обхват груди, см: 84','Бюст — чашка: B','Талия, см: 61','Бёдра, см: 90','Размер обуви: 39','Цвет волос: Русые','Цвет глаз: Ореховые','Возраст, полных лет: 14',candidate_fields['file_link'],base['message'],base['email'],base['phone']]) and sorted(part.get_filename() for part in message.iter_attachments())==['front.png','profile.png'] and all(part.get_payload(decode=True)==png for part in message.iter_attachments()))
+        check('candidate email includes all fields and original photos',all(value in text for value in ['Ник в Телеграм: @fixture_candidate','Город: Тест','Рост, см: 177','Обхват груди, см: 84','Бюст — чашка: B','Талия, см: 61','Бёдра, см: 90','Размер обуви: 39','Цвет волос: Русые','Цвет глаз: Ореховые','Возраст, полных лет: 14','Отметка для кандидата до 18 лет:',candidate_fields['file_link'],base['message'],base['email'],base['phone']]) and sorted(part.get_filename() for part in message.iter_attachments())==['front.png','profile.png'] and all(part.get_payload(decode=True)==png for part in message.iter_attachments()))
     count=len(mail_messages());api('/api/studio/notifications/'+application['id']+'/retry',method='POST',cookie=cookie,data={})
     check('retry does not resend already accepted messages',len(mail_messages())==count)
     private=api('/api/studio/data',cookie=cookie);delivered=next(i for i in private['inquiries'] if i['id']==application['id'])
     check('private inbox reports successful mail handoff',all(mail['status']=='sent' and mail['sent_at'] for mail in delivered['notifications']))
     set_mail({'transport':'mail','password':'fixture-smtp-password-not-for-export'})
     for age in [15,16,17]:
-        values={**base,'kind':'application','city':'Тест','telegram':'@fixture_candidate','age':str(age)}
+        values={**base,'kind':'application','city':'Тест','telegram':'@fixture_candidate','age':str(age),'guardian_consent':'yes'}
         accepted=upload('/api/inquiries',values,[])
         stored_candidate=next(i for i in api('/api/studio/data',cookie=cookie)['inquiries'] if i['id']==accepted['id'])
         check('candidate age '+str(age)+' is accepted without optional measurements',stored_candidate['age']==age and stored_candidate['height'] is None and stored_candidate['bust'] is None)
         api('/api/studio/inquiries/'+accepted['id'],method='DELETE',cookie=cookie)
-    check('consent version and acceptance time are recorded',all(i['consent'] and i['consent_version']=='2026-11-21.1' and i['consent_at']==i['created_at'] for i in received))
+    check('consent version and acceptance time are recorded',all(i['consent'] and i['consent_version']==base['consent_version'] and i['consent_at']==i['created_at'] for i in received))
     api('/api/studio/settings',method='PUT',data={'applications_enabled':False},cookie=cookie)
     check('applications setting is a stored boolean',api('/api/public')['settings']['applications_enabled'] is False)
     upload('/api/inquiries',{**base,'kind':'application','age':'21','height':'177'},[],status=403)
@@ -284,6 +291,64 @@ try:
     check('closed applications block candidates but keep bookings working',len(api('/api/studio/data',cookie=cookie)['inquiries'])==2)
     api('/api/studio/settings',method='PUT',data={'applications_enabled':True},cookie=cookie)
     check('applications can be enabled again',api('/api/public')['settings']['applications_enabled'] is True)
+    check('minor confirmation and timestamp are stored',candidate['guardian_consent'] is True and bool(candidate['guardian_consent_at']) and bool(candidate['custom_data']['guardian_label']))
+    upload('/api/inquiries',{**candidate_fields,'guardian_consent':''},[],status=400)
+    editor=api('/api/studio/data',cookie=cookie);original_forms=editor['forms']
+    for resource in ['forms/application','layout','contacts']:
+        expect('/api/studio/'+resource,method='PUT',data={},status=401)
+    application_config=json.loads(json.dumps(original_forms['application']))
+    application_config['title']='Анкета из редактора'
+    application_config['fields'].append({'key':'custom_experience','label':'Опыт работы','type':'textarea','visible':True,'required':True,'full':True,'placeholder':'Расскажите','help':'','options':[]})
+    updated_form=api('/api/studio/forms/application',method='PUT',cookie=cookie,data={'config':application_config,'expected_version':original_forms['application']['version']})
+    check('form editor publishes headings, required custom fields and field order',api('/api/public')['forms']['application']['title']=='Анкета из редактора' and updated_form['fields'][-1]['key']=='custom_experience')
+    expect('/api/studio/forms/application',method='PUT',cookie=cookie,data={'config':application_config,'expected_version':original_forms['application']['version']},status=409)
+    no_age={**updated_form,'fields':[field for field in updated_form['fields'] if field['key']!='age']}
+    expect('/api/studio/forms/application',method='PUT',cookie=cookie,data={'config':no_age,'expected_version':updated_form['version']},status=400)
+    upload('/api/inquiries',candidate_fields,[],status=400)
+    custom_application=upload('/api/inquiries',{**candidate_fields,'age':'18','guardian_consent':'','custom_experience':'Проверочный опыт из редактора'},[])
+    custom_record=next(i for i in api('/api/studio/data',cookie=cookie)['inquiries'] if i['id']==custom_application['id'])
+    check('custom answers retain labels and adults do not need the minor checkbox',custom_record['custom_data']['fields']==[{'key':'custom_experience','label':'Опыт работы','type':'textarea','value':'Проверочный опыт из редактора'}] and custom_record['guardian_consent'] is None)
+    custom_mail=['\n'.join(part.get_content() for part in message.walk() if part.get_content_type()=='text/plain') for message in mail_messages()]
+    check('custom questionnaire answers are included in full emails',any('Опыт работы: Проверочный опыт из редактора' in text for text in custom_mail))
+    api('/api/studio/inquiries/'+custom_application['id'],method='DELETE',cookie=cookie)
+    api('/api/studio/forms/application',method='PUT',cookie=cookie,data={'config':original_forms['application'],'expected_version':updated_form['version']})
+    booking_config=json.loads(json.dumps(original_forms['booking']))
+    booking_config['fields']+= [{'key':'custom_format','label':'Формат работы','type':'select','visible':True,'required':True,'full':False,'placeholder':'','help':'','options':[['Каталог','Каталог'],['Показ','Показ']]},{'key':'custom_confirm','label':'Подтверждаю детали проекта','type':'checkbox','visible':True,'required':True,'full':True,'placeholder':'','help':'','options':[]}]
+    updated_booking=api('/api/studio/forms/booking',method='PUT',cookie=cookie,data={'config':booking_config,'expected_version':original_forms['booking']['version']})
+    upload('/api/inquiries',{**base,'kind':'booking','custom_format':'Неверно','custom_confirm':'yes'},[],status=400)
+    upload('/api/inquiries',{**base,'kind':'booking','custom_format':'Показ'},[],status=400)
+    custom_booking=upload('/api/inquiries',{**base,'kind':'booking','custom_format':'Показ','custom_confirm':'yes'},[])
+    submitted_booking=next(i for i in api('/api/studio/data',cookie=cookie)['inquiries'] if i['id']==custom_booking['id'])
+    check('booking editor enforces custom select choices and required checkboxes',[field['value'] for field in submitted_booking['custom_data']['fields']]==['Показ','Да'])
+    api('/api/studio/inquiries/'+custom_booking['id'],method='DELETE',cookie=cookie)
+    api('/api/studio/forms/booking',method='PUT',cookie=cookie,data={'config':original_forms['booking'],'expected_version':updated_booking['version']})
+    layout=api('/api/studio/data',cookie=cookie)['layout']
+    new_nav=[{'id':'test-phone','label':'Букинг: +7 000 000-00-00','type':'phone','value':'+7 000 000-00-00','source':'','enabled':True,'placement':'actions'},*layout['navigation']]
+    layout=api('/api/studio/layout',method='PUT',cookie=cookie,data={'navigation':new_nav,'expected_version':layout['version']})
+    footer_block={'id':'test-footer','title':'Адрес букинга','kind':'content','align':'right','width':2,'enabled':True,'items':[{'id':'test-address','label':'Офис','type':'address','value':'Тестовый адрес 42','source':'','enabled':True},{'id':'test-xss','label':'','type':'text','value':'<script>unsafe</script>','source':'','enabled':True}]}
+    layout=api('/api/studio/layout',method='PUT',cookie=cookie,data={'footer':[footer_block,*layout['footer']],'expected_version':layout['version']})
+    chrome=api('/api/public')['chrome']
+    check('menu placement and footer block order, width and alignment persist',chrome['navigation'][0]['placement']=='actions' and 'tel:+70000000000' in chrome['navigation'][0]['html'] and 'align-right width-2' in chrome['footer'] and chrome['footer'].index('Адрес букинга')<chrome['footer'].index('Реквизиты'))
+    check('footer editor escapes text and includes the address', '&lt;script&gt;unsafe&lt;/script&gt;' in chrome['footer'] and '<script>unsafe</script>' not in chrome['footer'] and 'Тестовый адрес 42' in chrome['footer'] and 'Брестская' in chrome['footer'])
+    for path in ['/privacy','/consent','/cookies',admin_path]:
+        _,page=expect(path);check('shared edited footer is rendered on '+path,'Тестовый адрес 42'.encode() in page)
+    for unsafe in ['javascript:alert(1)','//evil.example','/\\evil.example']:
+        expect('/api/studio/layout',method='PUT',cookie=cookie,data={'navigation':[{'id':'bad','label':'Bad','type':'link','value':unsafe,'source':'','enabled':True}],'expected_version':layout['version']},status=400)
+    old_layout_version=layout['version']
+    layout=api('/api/studio/layout',method='PUT',cookie=cookie,data={'navigation':layout['navigation'],'expected_version':layout['version']})
+    expect('/api/studio/layout',method='PUT',cookie=cookie,data={'footer':layout['footer'],'expected_version':old_layout_version},status=409)
+    people=api('/api/studio/data',cookie=cookie)['contacts']
+    check('the three supplied agency Telegram contacts are available',len(people['items'])==3 and people['items'][0]['telegram']=='https://t.me/Yulia_Grace_Models')
+    hidden_person={'id':'hidden-scout','name':'Private Scout','role':'Скрытый контакт','telegram':'@HiddenScout','enabled':False}
+    public_person={'id':'test-scout','name':'Тестовый сотрудник','role':'Кастинги и показы','telegram':'@TestScout','enabled':True}
+    saved_people=api('/api/studio/contacts',method='PUT',cookie=cookie,data={'items':[public_person,hidden_person,*people['items']],'expected_version':people['version']})
+    public_people=api('/api/public')['contacts']['items']
+    check('multiple Telegram roles, order and hidden contacts persist privately',public_people[0]['role']=='Кастинги и показы' and public_people[0]['telegram']=='https://t.me/TestScout' and not any(person['id']=='hidden-scout' for person in public_people) and len(saved_people['items'])==5)
+    expect('/api/studio/contacts',method='PUT',cookie=cookie,data={'items':people['items'],'expected_version':people['version']},status=409)
+    expect('/api/studio/contacts',method='PUT',cookie=cookie,data={'items':[{**public_person,'telegram':'https://evil.example/TestScout'}],'expected_version':saved_people['version']},status=400)
+    api('/api/studio/contacts',method='PUT',cookie=cookie,data={'items':people['items'],'expected_version':saved_people['version']})
+    public_snapshot=json.dumps(api('/api/public'),ensure_ascii=False).lower()
+    check('public pages use the new agency email without exposing mail routing','info@grace-models.ru' in public_snapshot and 'info@grace-models.com' not in public_snapshot and 'gracemodelsmail@gmail.com' not in public_snapshot)
     key=candidate['attachments'][0]['key'];private_path='/api/studio/files/'+key
     expect(private_path,status=401);expect('/media/'+key,status=404)
     headers,attachment=expect(private_path,cookie=cookie);check('candidate files stay private and downloadable',attachment==png and 'attachment;' in headers.get('Content-Disposition',''))
@@ -324,7 +389,7 @@ try:
     settings=api('/api/public')['settings'];check('settings persist and unsafe links are removed',settings['city']=='Проверенный город' and settings['telegram']=='')
     expect('/api/studio/settings',method='PUT',data={'name':'Wrong'},cookie=cookie,headers={'Origin':'https://other.example'},status=403)
     headers,body=expect('/api/studio/export',cookie=cookie);backup=json.loads(body);check('backup export excludes credentials','admin_hash' not in body.decode() and 'token_hash' not in body.decode() and 'fixture-smtp-password-not-for-export' not in body.decode() and backup['settings']['name']=='Grace Models')
-    check('backup includes all consent text revisions',len(backup['documents']['consent']['history'])==2 and all('body' in version for version in backup['documents']['consent']['history']))
+    check('backup includes all consent text revisions',len(backup['documents']['consent']['history'])==len(documents['consent']['history'])+1 and all('body' in version for version in backup['documents']['consent']['history']))
     public_text=json.dumps(api('/api/public'));check('public data excludes mail routing and SMTP secrets','gracemodelsmail@gmail.com' not in public_text and 'fixture-smtp-password-not-for-export' not in public_text)
     stop();start()
     check('session and data survive server restart',api('/api/studio/data',cookie=cookie)['settings']['city']=='Проверенный город')

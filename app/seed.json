@@ -4,7 +4,7 @@
     "descriptor": "",
     "city": "Москва",
     "city_en": "Moscow",
-    "email": "Info@grace-models.com",
+    "email": "info@grace-models.ru",
     "phone": "",
     "telegram": "",
     "instagram": "",
@@ -19,7 +19,9 @@
     "hero_secondary": "/images/man-04.jpg",
     "demo_mode": true,
     "applications_enabled": true,
-    "news_enabled": true
+    "news_enabled": true,
+    "about_image": "/images/woman-02.jpg",
+    "logo_url": "/images/grace-models-logo-original.jpg"
   },
   "models": [
     {

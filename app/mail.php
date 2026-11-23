@@ -6,8 +6,8 @@ final class GraceMailError extends RuntimeException {}
 
 function grace_mail_recipients(string $kind): array {
     return $kind==='application'
-        ? ['Info@grace-models.com','gracemodelsmail@gmail.com','gracemodelsmoscow@gmail.com']
-        : ['gracemodelsmoscow@gmail.com'];
+        ? ['Info@grace-models.com','gracemodelsmail@gmail.com','gracemodelsmoscow@gmail.com','info@grace-models.ru']
+        : ['gracemodelsmoscow@gmail.com','info@grace-models.ru'];
 }
 
 function grace_mail_schema(PDO $pdo, array $config): void {
@@ -31,6 +31,12 @@ function grace_mail_rows(array $inquiry): array {
         if (!empty($inquiry['instagram'])) $rows[]=['Соцсеть / портфолио',$inquiry['instagram']];
         if (!empty($inquiry['birth_date'])) $rows[]=['Дата рождения',$inquiry['birth_date']];
     } else $rows=[...$rows,['Бренд / компания',$inquiry['company']],['Выбранная модель',$inquiry['model_name'] ?: 'Подбор модели'],['Дата съёмки',$inquiry['shooting_date']]];
+    $custom=is_array($inquiry['custom_data'] ?? null)?$inquiry['custom_data']:json_decode($inquiry['custom_data'] ?? '{}',true,64,JSON_THROW_ON_ERROR);
+    foreach ($custom['fields'] ?? [] as $field) $rows[]=[$field['label'],$field['value']];
+    if (!empty($inquiry['guardian_consent'])) {
+        $rows[]=['Отметка для кандидата до 18 лет',$custom['guardian_label'] ?? 'Подтверждено'];
+        $rows[]=['Дата подтверждения отметки',$inquiry['guardian_consent_at']];
+    }
     return [...$rows,['Сообщение',$inquiry['message']],['Согласие на обработку данных',!empty($inquiry['consent'])?'Подтверждено':'Не зафиксировано'],['Редакция согласия',$inquiry['consent_version'] ?? ''],['Согласие подтверждено',$inquiry['consent_at'] ?? '']];
 }
 
@@ -89,7 +95,7 @@ function grace_build_mail(array $inquiry, array $job): \PHPMailer\PHPMailer\PHPM
     return $mailer;
 }
 
-function grace_process_mail(int $limit=3, ?string $inquiryId=null): array {
+function grace_process_mail(int $limit=4, ?string $inquiryId=null): array {
     $limit=max(1,min(100,$limit)); $now=time(); $table=grace_table('mail_queue');
     grace_query("UPDATE $table SET status='failed',locked_until=0,last_error='Превышено число попыток отправки. Повторите отправку из кабинета.' WHERE attempts>=5 AND locked_until<=? AND status IN ('pending','retry')",[$now]);
     $where="status IN ('pending','retry') AND next_attempt_at<=? AND locked_until<=?"; $parameters=[$now,$now];
@@ -123,7 +129,7 @@ function grace_process_mail(int $limit=3, ?string $inquiryId=null): array {
 function grace_mail_after_response(?string $inquiryId=null): void {
     register_shutdown_function(static function() use ($inquiryId): void {
         if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
-        try { grace_process_mail(3,$inquiryId); }
+        try { grace_process_mail(4,$inquiryId); }
         catch (Throwable) { error_log('Grace Models: mail queue processing failed.'); }
     });
 }
@@ -141,5 +147,5 @@ function grace_inquiries_with_mail(array $inquiries): array {
 function grace_retry_inquiry_mail(string $id): array {
     if (!grace_first('SELECT id FROM '.grace_table('inquiries').' WHERE id=?',[$id])) grace_error('Заявка не найдена.',404);
     grace_query("UPDATE ".grace_table('mail_queue')." SET status='pending',attempts=0,next_attempt_at=0,last_error='' WHERE inquiry_id=? AND status IN ('retry','failed') AND locked_until<=?",[$id,time()]);
-    return grace_process_mail(3,$id);
+    return grace_process_mail(4,$id);
 }

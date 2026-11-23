@@ -2,9 +2,9 @@
 declare(strict_types=1);
 if (!defined('GRACE_ROOT')) { http_response_code(404); exit; }
 
-const GRACE_VERSION = '2.3.0';
-const GRACE_SCHEMA_VERSION = 5;
-const GRACE_CONSENT_VERSION = '2026-11-21.1';
+const GRACE_VERSION = '2.4.0';
+const GRACE_SCHEMA_VERSION = 6;
+const GRACE_CONSENT_VERSION = '2026-11-23.1';
 const GRACE_COOKIE = 'grace_models_admin';
 const GRACE_COOKIE_AGE = 34560000;
 
@@ -152,7 +152,7 @@ function grace_send_file(string $file, string $mime, ?string $downloadName = nul
 function grace_template(string $name, bool $private = false): never {
     $file = GRACE_ROOT.'/public/'.$name; if (!is_file($file)) grace_not_found();
     if ($private) header('X-Robots-Tag: noindex, nofollow');
-    grace_html((string)file_get_contents($file));
+    grace_html(strtr((string)file_get_contents($file),['{{SITE_FOOTER}}'=>grace_footer_html(),'{{SITE_LOGO}}'=>grace_logo_html()]));
 }
 function grace_asset_file(string $relative): string {
     $relative=ltrim($relative,'/');
@@ -164,6 +164,7 @@ require_once GRACE_ROOT.'/app/database.php';
 require_once GRACE_ROOT.'/app/auth.php';
 require_once GRACE_ROOT.'/app/mail.php';
 require_once GRACE_ROOT.'/app/legal.php';
+require_once GRACE_ROOT.'/app/site-editor.php';
 require_once GRACE_ROOT.'/app/install.php';
 require_once GRACE_ROOT.'/app/api.php';
 
@@ -171,7 +172,7 @@ function grace_dispatch(): never {
     $path = rawurldecode(parse_url($_SERVER['REQUEST_URI'] ?? '/',PHP_URL_PATH) ?: '/');
     $path = rtrim($path,'/') ?: '/';
     if (str_contains($path,"\0") || preg_match('#(?:^|/)\.\.(?:/|$)#',$path)) grace_not_found();
-    $assets = ['app.js'=>'text/javascript; charset=utf-8','catalog.js'=>'text/javascript; charset=utf-8','model-options.js'=>'text/javascript; charset=utf-8','cookies.js'=>'text/javascript; charset=utf-8','cookies.css'=>'text/css; charset=utf-8','legal.css'=>'text/css; charset=utf-8','style.css'=>'text/css; charset=utf-8','favicon.svg'=>'image/svg+xml','login.css'=>'text/css; charset=utf-8','login.js'=>'text/javascript; charset=utf-8','install.js'=>'text/javascript; charset=utf-8'];
+    $assets = ['app.js'=>'text/javascript; charset=utf-8','catalog.js'=>'text/javascript; charset=utf-8','form-fields.js'=>'text/javascript; charset=utf-8','chrome.css'=>'text/css; charset=utf-8','model-options.js'=>'text/javascript; charset=utf-8','cookies.js'=>'text/javascript; charset=utf-8','cookies.css'=>'text/css; charset=utf-8','legal.css'=>'text/css; charset=utf-8','style.css'=>'text/css; charset=utf-8','favicon.svg'=>'image/svg+xml','login.css'=>'text/css; charset=utf-8','login.js'=>'text/javascript; charset=utf-8','install.js'=>'text/javascript; charset=utf-8'];
     $name = ltrim($path,'/');
     if (isset($assets[$name])) grace_send_file(grace_asset_file($name),$assets[$name]);
     if (preg_match('#^/fonts/([a-zA-Z0-9._-]+\.(?:woff2|ttf))$#',$path,$font)) grace_send_file(grace_asset_file('fonts/'.$font[1]),str_ends_with($font[1],'.woff2')?'font/woff2':'font/ttf');
@@ -193,9 +194,9 @@ function grace_dispatch(): never {
         $session = grace_admin_session(); if ($session) grace_renew_cookie($session['token']);
         grace_template($session ? 'admin.html' : 'login.html',true);
     }
-    if (in_array($path,['/admin.js','/admin.css'],true)) {
+    if (in_array($path,['/admin.js','/admin.css','/site-editor.js'],true)) {
         grace_require_admin(); header('X-Robots-Tag: noindex, nofollow');
-        grace_send_file(grace_asset_file($path),$path === '/admin.js'?'text/javascript; charset=utf-8':'text/css; charset=utf-8',null,true);
+        grace_send_file(grace_asset_file($path),str_ends_with($path,'.js')?'text/javascript; charset=utf-8':'text/css; charset=utf-8',null,true);
     }
     if (str_starts_with($path,'/api/')) grace_api($path);
     if (str_starts_with($path,'/media/')) {

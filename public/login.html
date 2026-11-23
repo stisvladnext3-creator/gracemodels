@@ -11,11 +11,12 @@
   <script type="module" src="/login.js"></script>
   <link rel="stylesheet" href="/cookies.css">
   <script type="module" src="/cookies.js"></script>
+  <link rel="stylesheet" href="/chrome.css">
 </head>
 <body>
   <main class="login-layout">
     <section class="login-form-panel">
-      <a class="login-wordmark" href="/"><img src="/images/grace-models-logo.png" alt="Grace Models" width="291" height="128"></a>
+      <a class="login-wordmark" href="/">{{SITE_LOGO}}</a>
       <div class="login-main">
         <p class="eyebrow"><span></span>ПРОСТРАНСТВО АГЕНТСТВА</p>
         <h1>С возвращением.</h1>
@@ -34,12 +35,12 @@
         </form>
         <a class="back-link" href="/">← Вернуться на сайт</a>
       </div>
-      <footer class="login-legal"><strong>ООО «Грейс Модельс»</strong><p>ИНН 7706548391 · ОГРН 1047796616471</p><p>125047, Москва Город, 1-я Брестская Улица, дом 33, стр. 2, кв./офис 40</p><a href="mailto:Info@grace-models.com">Info@grace-models.com</a><div><a href="/consent" target="_blank" rel="noopener">Согласие на обработку персональных данных</a><a href="/privacy" target="_blank" rel="noopener">Политика конфиденциальности</a><a href="/cookies" target="_blank" rel="noopener">Файлы cookie</a><button type="button" class="cookie-settings-link" data-cookie-settings>Настройки cookie</button></div></footer>
     </section>
     <aside class="login-visual" aria-hidden="true">
       <img src="/images/woman-02.jpg" alt="">
       <div class="visual-caption"><span>ЗА КАЖДЫМ ЛИЦОМ —<br>СВОЯ ИСТОРИЯ.</span><span>↗</span></div>
     </aside>
   </main>
+  {{SITE_FOOTER}}
 </body>
 </html>

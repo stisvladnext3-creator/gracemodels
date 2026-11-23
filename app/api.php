@@ -10,6 +10,8 @@ function grace_model_row(array $row): array {
 }
 function grace_inquiry_row(array $row): array {
     $row['attachments']=json_decode($row['attachments'],true,64,JSON_THROW_ON_ERROR);
+    $row['custom_data']=json_decode($row['custom_data'] ?? '{}',true,64,JSON_THROW_ON_ERROR);
+    $row['guardian_consent']=$row['guardian_consent']===null?null:(bool)$row['guardian_consent'];
     foreach (['age','height','bust','waist','hips','shoe'] as $key) $row[$key]=$row[$key]===null?null:(int)$row[$key];
     $row['consent']=(bool)$row['consent']; return $row;
 }
@@ -73,14 +75,13 @@ function grace_put_upload(array $file, string $prefix, bool $allowPdf = false): 
     return ['key'=>$key,'name'=>grace_text(basename((string)$file['name']),160),'type'=>$mime,'size'=>(int)$file['size']];
 }
 function grace_public_data(): array {
-    return ['models'=>array_map('grace_model_row',grace_rows('SELECT * FROM '.grace_table('models').' WHERE published=1 ORDER BY sort_order,created_at')),'news'=>array_map('grace_news_row',grace_rows('SELECT * FROM '.grace_table('news').' WHERE published=1 ORDER BY published_at DESC')),'settings'=>grace_settings(),'documents'=>grace_legal_metadata()];
+    return ['models'=>array_map('grace_model_row',grace_rows('SELECT * FROM '.grace_table('models').' WHERE published=1 ORDER BY sort_order,created_at')),'news'=>array_map('grace_news_row',grace_rows('SELECT * FROM '.grace_table('news').' WHERE published=1 ORDER BY published_at DESC')),'settings'=>grace_settings(),'documents'=>grace_legal_metadata(),...grace_editor_data()];
 }
 function grace_admin_data(bool $all = false): array {
-    return ['models'=>array_map('grace_model_row',grace_rows('SELECT * FROM '.grace_table('models').' ORDER BY sort_order,created_at')),'inquiries'=>grace_inquiries_with_legal(grace_inquiries_with_mail(array_map('grace_inquiry_row',grace_rows('SELECT * FROM '.grace_table('inquiries').' ORDER BY created_at DESC'.($all?'':' LIMIT 2000'))))),'news'=>array_map('grace_news_row',grace_rows('SELECT * FROM '.grace_table('news').' ORDER BY published_at DESC')),'activity'=>grace_rows('SELECT * FROM '.grace_table('activity').' ORDER BY created_at DESC'.($all?'':' LIMIT 40')),'settings'=>grace_settings(),'documents'=>grace_legal_admin($all)];
+    return ['models'=>array_map('grace_model_row',grace_rows('SELECT * FROM '.grace_table('models').' ORDER BY sort_order,created_at')),'inquiries'=>grace_inquiries_with_legal(grace_inquiries_with_mail(array_map('grace_inquiry_row',grace_rows('SELECT * FROM '.grace_table('inquiries').' ORDER BY created_at DESC'.($all?'':' LIMIT 2000'))))),'news'=>array_map('grace_news_row',grace_rows('SELECT * FROM '.grace_table('news').' ORDER BY published_at DESC')),'activity'=>grace_rows('SELECT * FROM '.grace_table('activity').' ORDER BY created_at DESC'.($all?'':' LIMIT 40')),'settings'=>grace_settings(),'documents'=>grace_legal_admin($all),...grace_editor_data(true)];
 }
 function grace_application_data(array $input): array {
     $data=['telegram'=>grace_text($input['telegram'] ?? '',100),'city'=>grace_text($input['city'] ?? '',100)];
-    if ($data['city']==='' || $data['telegram']==='') grace_error('Укажите город и ник в Telegram.');
     $data['age']=filter_var($input['age'] ?? null,FILTER_VALIDATE_INT);
     if ($data['age']===false || $data['age']<14 || $data['age']>80) grace_error('Принимаем заявки от кандидатов от 14 до 80 лет. Проверьте возраст.');
     foreach (['height'=>['Рост',100,230],'bust'=>['Обхват груди',40,160],'waist'=>['Талия',35,160],'hips'=>['Бёдра',40,160],'shoe'=>['Размер обуви',20,55]] as $key=>[$label,$min,$max]) {
@@ -117,6 +118,7 @@ function grace_create_inquiry(): never {
     $modelId=grace_text($input['model_id'] ?? '',100); $modelName='';
     if ($modelId!=='') { $model=grace_first('SELECT name FROM '.grace_table('models').' WHERE id=? AND published=1',[$modelId]); if (!$model) grace_error('Анкета модели недоступна. Выберите другую модель.'); $modelName=$model['name']; }
     $files=grace_uploaded_files('photos');
+    $formData=grace_form_submission($kind,$input,$files);
     if ($kind==='application' && array_filter($files,fn($file)=>(int)$file['size']>3*1024*1024)) grace_error('Одна фотография — не более 3 МБ.');
     if (count($files)>3 || array_sum(array_column($files,'size'))>15*1024*1024) grace_error('Добавьте не более 3 файлов, до 5 МБ каждый.');
     $limitKey=grace_limiter_key('inquiry'); grace_limiter_check($limitKey,12); grace_limiter_add($limitKey,3600);
@@ -125,7 +127,7 @@ function grace_create_inquiry(): never {
         foreach ($files as $file) $attachments[]=grace_put_upload($file,'private/inquiries/'.$id,$kind!=='application');
         $acceptedAt=grace_now();
         $pdo->beginTransaction();
-        grace_insert('inquiries',['id'=>$id,'kind'=>$kind,'name'=>$name,'email'=>$email,'phone'=>$phone,'city'=>grace_text($input['city'] ?? '',100),'age'=>null,'height'=>null,...$application,'instagram'=>grace_text($input['instagram'] ?? '',200),'model_id'=>$modelId,'model_name'=>$modelName,'company'=>grace_text($input['company'] ?? '',200),'shooting_date'=>grace_text($input['shooting_date'] ?? '',40),'message'=>grace_text($input['message'] ?? '',5000),'attachments'=>json_encode($attachments,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),'status'=>'new','internal_note'=>'','consent'=>1,'consent_version'=>$consentVersion,'consent_at'=>$acceptedAt,'created_at'=>$acceptedAt,'updated_at'=>$acceptedAt]);
+        grace_insert('inquiries',['id'=>$id,'kind'=>$kind,'name'=>$name,'email'=>$email,'phone'=>$phone,'city'=>grace_text($input['city'] ?? '',100),'age'=>null,'height'=>null,...$application,...$formData,'instagram'=>grace_text($input['instagram'] ?? '',200),'model_id'=>$modelId,'model_name'=>$modelName,'company'=>grace_text($input['company'] ?? '',200),'shooting_date'=>grace_text($input['shooting_date'] ?? '',40),'message'=>grace_text($input['message'] ?? '',5000),'attachments'=>json_encode($attachments,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),'status'=>'new','internal_note'=>'','consent'=>1,'consent_version'=>$consentVersion,'consent_at'=>$acceptedAt,'created_at'=>$acceptedAt,'updated_at'=>$acceptedAt]);
         grace_enqueue_mail($id,$kind,$pdo,grace_config());
         $pdo->commit();
     } catch (Throwable $exception) { if ($pdo->inTransaction()) $pdo->rollBack(); foreach ($attachments as $file) @unlink(grace_file_path($file['key'])); throw $exception; }
@@ -145,6 +147,13 @@ function grace_api(string $path): never {
     if ($resource==='data' && $method==='GET') { grace_mail_after_response(); grace_json([...grace_admin_data(),'user'=>['login'=>$session['login']]]); }
     if ($resource==='notifications' && $method==='POST' && preg_match('#^([a-f0-9-]{36})/retry$#',$id,$match)) grace_json(grace_retry_inquiry_mail($match[1]));
     if ($resource==='documents' && $method==='PUT') grace_json(grace_publish_legal($id,grace_read_json(262144)));
+    if ($resource==='forms' && $method==='PUT') {
+        if (!in_array($id,['application','booking'],true)) grace_error('Форма не найдена.',404);
+        $input=grace_read_json(262144);if (!is_array($input['config'] ?? null)) grace_error('Проверьте настройки формы.');$form=grace_form_config($id,$input['config']);
+        grace_json(grace_editor_save('form_'.$id,$form,grace_text($input['expected_version'] ?? '',100)));
+    }
+    if ($resource==='layout' && $method==='PUT') grace_json(grace_publish_layout(grace_read_json(262144)));
+    if ($resource==='contacts' && $method==='PUT') grace_json(grace_publish_contacts(grace_read_json(65536)));
     if ($resource==='export' && $method==='GET') {
         header('Content-Disposition: attachment; filename="grace-models-backup-'.gmdate('Y-m-d').'.json"'); grace_json(['version'=>GRACE_VERSION,'exported_at'=>grace_now(),...grace_admin_data(true)]);
     }
@@ -182,11 +191,12 @@ function grace_api(string $path): never {
         $input=grace_read_json(); $settings=grace_settings();
         foreach (array_keys(grace_seed()['settings']) as $key) if (array_key_exists($key,$input)) {
             if (in_array($key,['demo_mode','applications_enabled','news_enabled'],true)) $settings[$key]=(bool)filter_var($input[$key],FILTER_VALIDATE_BOOLEAN);
-            elseif (str_starts_with($key,'hero_')) $settings[$key]=grace_media_url($input[$key]);
+            elseif (str_starts_with($key,'hero_') || in_array($key,['about_image','logo_url'],true)) $settings[$key]=grace_media_url($input[$key]);
             elseif (in_array($key,['telegram','instagram','vk'],true)) $settings[$key]=str_starts_with(grace_text($input[$key],500),'https://') && filter_var($input[$key],FILTER_VALIDATE_URL)?grace_text($input[$key],500):'';
-            else $settings[$key]=grace_text($input[$key],str_starts_with($key,'about')?10000:500);
+            else $settings[$key]=grace_public_email(grace_text($input[$key],str_starts_with($key,'about')?10000:500));
         }
         if ($settings['name']==='') grace_error('Укажите название агентства.');
+        if (!filter_var($settings['email'],FILTER_VALIDATE_EMAIL)) grace_error('Укажите корректную публичную почту.');
         grace_save_setting('agency',$settings); grace_audit('Настройки сохранены',$settings['name']); grace_json(['ok'=>true]);
     }
     if ($resource==='news' && in_array($method,['POST','PUT'],true)) {

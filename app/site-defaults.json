@@ -1,0 +1,649 @@
+{
+  "forms": {
+    "application": {
+      "version": "2.4-default",
+      "submit_label": "Отправить заявку",
+      "success_title": "Заявка получена.",
+      "success_text": "Спасибо за знакомство. Заявка сохранена и доступна команде агентства.",
+      "guardian_label": "Мне нет 18 лет. Подтверждаю, что родитель или законный представитель ознакомлен с анкетой и согласен на её отправку.",
+      "eyebrow": "Первый шаг",
+      "title": "Быть собой.\nСтать моделью.",
+      "description": "Нам интересно увидеть вас настоящими. Заполните анкету и добавьте несколько простых фотографий без фильтров. Принимаем заявки с 14 лет.",
+      "image": "/images/woman-04.jpg",
+      "fields": [
+        {
+          "key": "name",
+          "label": "ФИО",
+          "type": "text",
+          "required": true,
+          "visible": true,
+          "full": false,
+          "placeholder": "",
+          "help": "",
+          "options": []
+        },
+        {
+          "key": "city",
+          "label": "Город",
+          "type": "text",
+          "required": true,
+          "visible": true,
+          "full": false,
+          "placeholder": "",
+          "help": "",
+          "options": []
+        },
+        {
+          "key": "telegram",
+          "label": "Ник в Телеграм",
+          "type": "text",
+          "required": true,
+          "visible": true,
+          "full": false,
+          "placeholder": "@…",
+          "help": "",
+          "options": []
+        },
+        {
+          "key": "age",
+          "label": "Возраст, полных лет",
+          "type": "number",
+          "required": true,
+          "visible": true,
+          "full": false,
+          "placeholder": "",
+          "help": "Принимаем анкеты с 14 лет.",
+          "options": [],
+          "min": 14,
+          "max": 80
+        },
+        {
+          "key": "phone",
+          "label": "Телефон",
+          "type": "tel",
+          "required": true,
+          "visible": true,
+          "full": false,
+          "placeholder": "+7 …",
+          "help": "",
+          "options": []
+        },
+        {
+          "key": "email",
+          "label": "Электронная почта",
+          "type": "email",
+          "required": true,
+          "visible": true,
+          "full": false,
+          "placeholder": "",
+          "help": "",
+          "options": []
+        },
+        {
+          "key": "height",
+          "label": "Рост, см",
+          "type": "number",
+          "required": false,
+          "visible": true,
+          "full": false,
+          "placeholder": "",
+          "help": "",
+          "options": [],
+          "min": 100,
+          "max": 230
+        },
+        {
+          "key": "bust",
+          "label": "Обхват груди, см",
+          "type": "number",
+          "required": false,
+          "visible": true,
+          "full": false,
+          "placeholder": "",
+          "help": "",
+          "options": [],
+          "min": 40,
+          "max": 160
+        },
+        {
+          "key": "bust_cup",
+          "label": "Бюст · размер чашки",
+          "type": "select",
+          "required": false,
+          "visible": true,
+          "full": false,
+          "placeholder": "",
+          "help": "",
+          "options": [
+            [
+              "AA",
+              "AA"
+            ],
+            [
+              "A",
+              "A"
+            ],
+            [
+              "B",
+              "B"
+            ],
+            [
+              "C",
+              "C"
+            ],
+            [
+              "D",
+              "D"
+            ],
+            [
+              "DD",
+              "DD"
+            ],
+            [
+              "E",
+              "E"
+            ],
+            [
+              "F",
+              "F"
+            ],
+            [
+              "G",
+              "G"
+            ],
+            [
+              "H",
+              "H"
+            ]
+          ]
+        },
+        {
+          "key": "waist",
+          "label": "Талия, см",
+          "type": "number",
+          "required": false,
+          "visible": true,
+          "full": false,
+          "placeholder": "",
+          "help": "",
+          "options": [],
+          "min": 35,
+          "max": 160
+        },
+        {
+          "key": "hips",
+          "label": "Бёдра, см",
+          "type": "number",
+          "required": false,
+          "visible": true,
+          "full": false,
+          "placeholder": "",
+          "help": "",
+          "options": [],
+          "min": 40,
+          "max": 160
+        },
+        {
+          "key": "shoe",
+          "label": "Размер обуви",
+          "type": "number",
+          "required": false,
+          "visible": true,
+          "full": false,
+          "placeholder": "",
+          "help": "",
+          "options": [],
+          "min": 20,
+          "max": 55
+        },
+        {
+          "key": "hair",
+          "label": "Цвет волос",
+          "type": "select",
+          "required": false,
+          "visible": true,
+          "full": false,
+          "placeholder": "",
+          "help": "",
+          "options": [
+            [
+              "blonde",
+              "Блонд"
+            ],
+            [
+              "light_brown",
+              "Русые"
+            ],
+            [
+              "brown",
+              "Каштановые"
+            ],
+            [
+              "black",
+              "Чёрные"
+            ],
+            [
+              "red",
+              "Рыжие"
+            ],
+            [
+              "gray",
+              "Седые"
+            ],
+            [
+              "other",
+              "Другой цвет"
+            ]
+          ]
+        },
+        {
+          "key": "eyes",
+          "label": "Цвет глаз",
+          "type": "select",
+          "required": false,
+          "visible": true,
+          "full": false,
+          "placeholder": "",
+          "help": "",
+          "options": [
+            [
+              "blue",
+              "Голубые"
+            ],
+            [
+              "brown",
+              "Карие"
+            ],
+            [
+              "green",
+              "Зелёные"
+            ],
+            [
+              "gray",
+              "Серые"
+            ],
+            [
+              "hazel",
+              "Ореховые"
+            ],
+            [
+              "gray_blue",
+              "Серо-голубые"
+            ],
+            [
+              "gray_green",
+              "Серо-зелёные"
+            ],
+            [
+              "other",
+              "Другой цвет"
+            ]
+          ]
+        },
+        {
+          "key": "file_link",
+          "label": "Ссылка на файлообменник",
+          "type": "url",
+          "required": false,
+          "visible": true,
+          "full": true,
+          "placeholder": "https://…",
+          "help": "",
+          "options": []
+        },
+        {
+          "key": "message",
+          "label": "Расскажите о себе",
+          "type": "textarea",
+          "required": false,
+          "visible": true,
+          "full": true,
+          "placeholder": "",
+          "help": "",
+          "options": []
+        },
+        {
+          "key": "photos",
+          "label": "Фотографии",
+          "type": "photos",
+          "required": false,
+          "visible": true,
+          "full": true,
+          "placeholder": "",
+          "help": "До 3 фотографий, до 3 МБ каждая. JPG, JPEG, PNG или WebP. Портрет, профиль и полный рост.",
+          "options": []
+        }
+      ]
+    },
+    "booking": {
+      "version": "2.4-default",
+      "submit_label": "Отправить заявку",
+      "success_title": "Заявка получена.",
+      "success_text": "Спасибо за знакомство. Заявка сохранена и доступна команде агентства.",
+      "guardian_label": "Мне нет 18 лет. Подтверждаю, что родитель или законный представитель ознакомлен с анкетой и согласен на её отправку.",
+      "eyebrow": "Создаём вместе",
+      "title": "Найдём лицо\nвашей истории.",
+      "description": "Расскажите о проекте, датах и команде. Мы получим заявку и сможем обсудить подходящих моделей и условия сотрудничества.",
+      "image": "/images/man-04.jpg",
+      "fields": [
+        {
+          "key": "name",
+          "label": "Имя и фамилия",
+          "type": "text",
+          "required": true,
+          "visible": true,
+          "full": false,
+          "placeholder": "",
+          "help": "",
+          "options": []
+        },
+        {
+          "key": "email",
+          "label": "Электронная почта",
+          "type": "email",
+          "required": true,
+          "visible": true,
+          "full": false,
+          "placeholder": "",
+          "help": "",
+          "options": []
+        },
+        {
+          "key": "phone",
+          "label": "Телефон",
+          "type": "tel",
+          "required": true,
+          "visible": true,
+          "full": false,
+          "placeholder": "",
+          "help": "",
+          "options": []
+        },
+        {
+          "key": "company",
+          "label": "Бренд / компания",
+          "type": "text",
+          "required": false,
+          "visible": true,
+          "full": false,
+          "placeholder": "",
+          "help": "",
+          "options": []
+        },
+        {
+          "key": "shooting_date",
+          "label": "Дата съёмки",
+          "type": "date",
+          "required": false,
+          "visible": true,
+          "full": false,
+          "placeholder": "",
+          "help": "",
+          "options": []
+        },
+        {
+          "key": "model_id",
+          "label": "Модель",
+          "type": "model",
+          "required": false,
+          "visible": true,
+          "full": false,
+          "placeholder": "",
+          "help": "",
+          "options": []
+        },
+        {
+          "key": "message",
+          "label": "О проекте: задача, формат и пожелания",
+          "type": "textarea",
+          "required": false,
+          "visible": true,
+          "full": true,
+          "placeholder": "",
+          "help": "",
+          "options": []
+        }
+      ]
+    }
+  },
+  "layout": {
+    "version": "2.4-default",
+    "navigation": [
+      {
+        "id": "nav-models",
+        "label": "Модели",
+        "value": "/models?category=main",
+        "type": "link",
+        "source": "",
+        "enabled": true,
+        "placement": "main"
+      },
+      {
+        "id": "nav-new",
+        "label": "Новые лица",
+        "value": "/models?category=new",
+        "type": "link",
+        "source": "",
+        "enabled": true,
+        "placement": "main"
+      },
+      {
+        "id": "nav-contacts",
+        "label": "Контакты",
+        "value": "/contacts",
+        "type": "link",
+        "source": "",
+        "enabled": true,
+        "placement": "main"
+      },
+      {
+        "id": "nav-about",
+        "label": "О нас",
+        "value": "/about",
+        "type": "link",
+        "source": "",
+        "enabled": true,
+        "placement": "main"
+      },
+      {
+        "id": "nav-apply",
+        "label": "Стать моделью",
+        "value": "/become-a-model",
+        "type": "link",
+        "source": "",
+        "enabled": true,
+        "placement": "main"
+      },
+      {
+        "id": "nav-booking",
+        "label": "Бронировать модель",
+        "value": "/booking",
+        "type": "link",
+        "source": "",
+        "enabled": true,
+        "placement": "actions"
+      }
+    ],
+    "footer": [
+      {
+        "id": "footer-brand",
+        "title": "",
+        "kind": "brand",
+        "align": "left",
+        "width": 1,
+        "enabled": true,
+        "items": []
+      },
+      {
+        "id": "footer-models",
+        "title": "Модели",
+        "kind": "content",
+        "align": "left",
+        "width": 1,
+        "enabled": true,
+        "items": [
+          {
+            "id": "fm-models",
+            "label": "Модели",
+            "value": "/models?category=main",
+            "type": "link",
+            "source": "",
+            "enabled": true
+          },
+          {
+            "id": "fm-new",
+            "label": "Новые лица",
+            "value": "/models?category=new",
+            "type": "link",
+            "source": "",
+            "enabled": true
+          }
+        ]
+      },
+      {
+        "id": "footer-agency",
+        "title": "Агентство",
+        "kind": "content",
+        "align": "left",
+        "width": 1,
+        "enabled": true,
+        "items": [
+          {
+            "id": "fa-about",
+            "label": "О нас",
+            "value": "/about",
+            "type": "link",
+            "source": "",
+            "enabled": true
+          },
+          {
+            "id": "fa-contacts",
+            "label": "Контакты",
+            "value": "/contacts",
+            "type": "link",
+            "source": "",
+            "enabled": true
+          },
+          {
+            "id": "fa-apply",
+            "label": "Стать моделью",
+            "value": "/become-a-model",
+            "type": "link",
+            "source": "",
+            "enabled": true
+          },
+          {
+            "id": "fa-booking",
+            "label": "Бронировать модель",
+            "value": "/booking",
+            "type": "link",
+            "source": "",
+            "enabled": true
+          }
+        ]
+      },
+      {
+        "id": "footer-contacts",
+        "title": "Связаться",
+        "kind": "content",
+        "align": "left",
+        "width": 1,
+        "enabled": true,
+        "items": [
+          {
+            "id": "fc-email",
+            "label": "",
+            "value": "info@grace-models.ru",
+            "type": "email",
+            "source": "email",
+            "enabled": true
+          },
+          {
+            "id": "fc-phone",
+            "label": "",
+            "value": "",
+            "type": "phone",
+            "source": "phone",
+            "enabled": true
+          },
+          {
+            "id": "fc-city",
+            "label": "",
+            "value": "Москва",
+            "type": "text",
+            "source": "city",
+            "enabled": true
+          }
+        ]
+      },
+      {
+        "id": "footer-details",
+        "title": "Реквизиты",
+        "kind": "content",
+        "align": "left",
+        "width": 4,
+        "enabled": true,
+        "items": [
+          {
+            "id": "fd-name",
+            "label": "",
+            "value": "ООО «Грейс Модельс»",
+            "type": "text",
+            "source": "",
+            "enabled": true
+          },
+          {
+            "id": "fd-inn",
+            "label": "ИНН",
+            "value": "7706548391",
+            "type": "text",
+            "source": "",
+            "enabled": true
+          },
+          {
+            "id": "fd-ogrn",
+            "label": "ОГРН",
+            "value": "1047796616471",
+            "type": "text",
+            "source": "",
+            "enabled": true
+          },
+          {
+            "id": "fd-address",
+            "label": "Адрес",
+            "value": "125047, Москва Город, 1-я Брестская Улица, дом 33, стр. 2, кв./офис 40",
+            "type": "address",
+            "source": "",
+            "enabled": true
+          }
+        ]
+      }
+    ]
+  },
+  "contacts": {
+    "version": "2.4-default",
+    "items": [
+      {
+        "id": "team-yulia",
+        "name": "Юлия",
+        "role": "Международный букинг",
+        "telegram": "https://t.me/Yulia_Grace_Models",
+        "enabled": true
+      },
+      {
+        "id": "team-laura",
+        "name": "Лаура",
+        "role": "Коммерческие проекты, кастинги и показы в России",
+        "telegram": "https://t.me/Electra160",
+        "enabled": true
+      },
+      {
+        "id": "team-irina",
+        "name": "Ирина Ши",
+        "role": "Развитие моделей и скаутинг",
+        "telegram": "https://t.me/Irina_Shi_Grace_Models",
+        "enabled": true
+      }
+    ]
+  }
+}

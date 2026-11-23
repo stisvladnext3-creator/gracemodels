@@ -56,7 +56,7 @@ function grace_inquiries_with_legal(array $inquiries): array {
 }
 function grace_publish_legal(string $key, array $input): array {
     if (!in_array($key,['consent','privacy'],true)) grace_error('Документ не найден.',404);
-    $title=grace_text($input['title'] ?? '',300);$body=grace_text($input['body'] ?? '',60000);
+    $title=grace_public_email(grace_text($input['title'] ?? '',300));$body=grace_public_email(grace_text($input['body'] ?? '',60000));
     if ($title==='' || $body==='') grace_error('Укажите заголовок и текст документа.');
     $current=grace_legal_document($key);
     if (($input['expected_version'] ?? '')!==$current['version']) grace_error('Документ уже изменён в другом окне. Скопируйте свои правки и обновите страницу.',409);
@@ -95,6 +95,6 @@ function grace_legal_page(string $key): never {
     $document=grace_legal_document($key,$requested);
     $updated=preg_match('/^(\d{4}-\d{2}-\d{2})/',$document['version'],$date)?(new DateTimeImmutable($date[1]))->format('d.m.Y'):(new DateTimeImmutable($document['created_at'] ?: 'now'))->setTimezone(new DateTimeZone('Europe/Moscow'))->format('d.m.Y');
     $html=(string)file_get_contents(GRACE_ROOT.'/public/legal-document.html');
-    $html=strtr($html,['{{UPDATED}}'=>$updated,'{{TITLE}}'=>grace_escape($document['title']),'{{VERSION}}'=>grace_escape($document['version']),'{{BODY}}'=>grace_legal_body($document['body'])]);
+    $html=strtr($html,['{{UPDATED}}'=>$updated,'{{TITLE}}'=>grace_escape($document['title']),'{{VERSION}}'=>grace_escape($document['version']),'{{BODY}}'=>grace_legal_body($document['body']),'{{SITE_FOOTER}}'=>grace_footer_html(),'{{SITE_LOGO}}'=>grace_logo_html()]);
     grace_html($html);
 }

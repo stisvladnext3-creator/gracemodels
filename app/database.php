@@ -32,6 +32,7 @@ function grace_application_columns(): array {
     // Retain birth_date for existing 2.2 records; the current form only collects age.
     return ['telegram'=>"VARCHAR(100) NOT NULL DEFAULT ''",'birth_date'=>"VARCHAR(10) NOT NULL DEFAULT ''",'bust_cup'=>"VARCHAR(3) NOT NULL DEFAULT ''",'bust'=>'INTEGER NULL','waist'=>'INTEGER NULL','hips'=>'INTEGER NULL','shoe'=>'INTEGER NULL','hair'=>"VARCHAR(30) NOT NULL DEFAULT ''",'eyes'=>"VARCHAR(30) NOT NULL DEFAULT ''",'file_link'=>"VARCHAR(1200) NOT NULL DEFAULT ''"];
 }
+function grace_editor_columns(): array { return ['custom_data'=>'LONGTEXT NULL','guardian_consent'=>'INTEGER NULL','guardian_consent_at'=>"VARCHAR(40) NOT NULL DEFAULT ''"]; }
 
 function grace_upgrade_database(PDO $pdo, array $config): void {
     $settings=grace_table('settings',$config);
@@ -41,6 +42,7 @@ function grace_upgrade_database(PDO $pdo, array $config): void {
     $changes=[];
     if ((int)$stored<2) $changes=['models'=>['bust_cup'=>"VARCHAR(3) NOT NULL DEFAULT ''"],'inquiries'=>['consent_version'=>"VARCHAR(40) NOT NULL DEFAULT ''",'consent_at'=>"VARCHAR(40) NOT NULL DEFAULT ''"]];
     if ((int)$stored<3) $changes['inquiries']=[...($changes['inquiries'] ?? []),...grace_application_columns()];
+    if ((int)$stored<6) $changes['inquiries']=[...($changes['inquiries'] ?? []),...grace_editor_columns()];
     foreach ($changes as $name=>$definitions) {
         $table=grace_table($name,$config);
         foreach ($definitions as $column=>$definition) {
@@ -55,12 +57,16 @@ function grace_upgrade_database(PDO $pdo, array $config): void {
     grace_mail_schema($pdo,$config);
     grace_legal_schema($pdo,$config);
     grace_seed_legal($pdo,$config);
+    grace_editor_seed($pdo,$config);
     $statement=$pdo->query("SELECT setting_value FROM $settings WHERE setting_key='agency'");
     $agency=json_decode((string)$statement->fetchColumn(),true,64,JSON_THROW_ON_ERROR);
-    if (is_array($agency) && in_array($agency['email'] ?? '',['','hello@example.com','info@example.com'],true)) {
-        $agency['email']='Info@grace-models.com';
+    if (is_array($agency)) {
+        $agency['email']='info@grace-models.ru';
+        $agency['about_image'] ??= $agency['hero_image'] ?? '/images/woman-02.jpg';
+        $agency['logo_url'] ??= '/images/grace-models-logo-original.jpg';
         $pdo->prepare("UPDATE $settings SET setting_value=? WHERE setting_key='agency'")->execute([json_encode($agency,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)]);
     }
+    grace_migrate_legal_contact($pdo,$config);
     $pdo->exec("UPDATE $settings SET setting_value='".GRACE_SCHEMA_VERSION."' WHERE setting_key='schema_version'");
 }
 function grace_table(string $name, ?array $config = null): string {
@@ -103,6 +109,7 @@ function grace_create_schema(PDO $pdo, array $config): void {
         'request_limits'=>"limiter_key VARCHAR(100) PRIMARY KEY, attempt_count INTEGER NOT NULL, expires_at BIGINT NOT NULL"
     ];
     foreach (grace_application_columns() as $column=>$definition) $schemas['inquiries'].=', `'.$column.'` '.$definition;
+    foreach (grace_editor_columns() as $column=>$definition) $schemas['inquiries'].=', `'.$column.'` '.$definition;
     foreach ($schemas as $name=>$schema) $pdo->exec('CREATE TABLE IF NOT EXISTS '.grace_table($name,$config).' ('.$schema.')'.($mysql?' ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci':''));
     grace_mail_schema($pdo,$config);
     grace_legal_schema($pdo,$config);
@@ -116,6 +123,7 @@ function grace_seed_database(PDO $pdo, array $config, bool $demo, string $agency
         grace_insert('settings',['setting_key'=>'agency','setting_value'=>json_encode($settings,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)],$pdo,$config);
         grace_insert('settings',['setting_key'=>'schema_version','setting_value'=>(string)GRACE_SCHEMA_VERSION],$pdo,$config);
         grace_seed_legal($pdo,$config);
+        grace_editor_seed($pdo,$config);
         if ($demo) {
             foreach ($seed['models'] as $model) {
                 $model['gallery']=json_encode($model['gallery'],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
