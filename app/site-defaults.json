@@ -407,7 +407,7 @@
     }
   },
   "layout": {
-    "version": "2.4-default",
+    "version": "2.5-default",
     "navigation": [
       {
         "id": "nav-models",
@@ -416,7 +416,9 @@
         "type": "link",
         "source": "",
         "enabled": true,
-        "placement": "main"
+        "placement": "main",
+        "label_en": "Models",
+        "value_en": ""
       },
       {
         "id": "nav-new",
@@ -425,7 +427,9 @@
         "type": "link",
         "source": "",
         "enabled": true,
-        "placement": "main"
+        "placement": "main",
+        "label_en": "New faces",
+        "value_en": ""
       },
       {
         "id": "nav-contacts",
@@ -434,7 +438,9 @@
         "type": "link",
         "source": "",
         "enabled": true,
-        "placement": "main"
+        "placement": "main",
+        "label_en": "Contacts",
+        "value_en": ""
       },
       {
         "id": "nav-about",
@@ -443,7 +449,9 @@
         "type": "link",
         "source": "",
         "enabled": true,
-        "placement": "main"
+        "placement": "main",
+        "label_en": "About us",
+        "value_en": ""
       },
       {
         "id": "nav-apply",
@@ -452,7 +460,9 @@
         "type": "link",
         "source": "",
         "enabled": true,
-        "placement": "main"
+        "placement": "main",
+        "label_en": "Become a model",
+        "value_en": ""
       },
       {
         "id": "nav-booking",
@@ -461,7 +471,9 @@
         "type": "link",
         "source": "",
         "enabled": true,
-        "placement": "actions"
+        "placement": "actions",
+        "label_en": "Book a model",
+        "value_en": ""
       }
     ],
     "footer": [
@@ -472,7 +484,8 @@
         "align": "left",
         "width": 1,
         "enabled": true,
-        "items": []
+        "items": [],
+        "title_en": ""
       },
       {
         "id": "footer-models",
@@ -488,7 +501,9 @@
             "value": "/models?category=main",
             "type": "link",
             "source": "",
-            "enabled": true
+            "enabled": true,
+            "label_en": "Models",
+            "value_en": ""
           },
           {
             "id": "fm-new",
@@ -496,9 +511,12 @@
             "value": "/models?category=new",
             "type": "link",
             "source": "",
-            "enabled": true
+            "enabled": true,
+            "label_en": "New faces",
+            "value_en": ""
           }
-        ]
+        ],
+        "title_en": "Models"
       },
       {
         "id": "footer-agency",
@@ -514,7 +532,9 @@
             "value": "/about",
             "type": "link",
             "source": "",
-            "enabled": true
+            "enabled": true,
+            "label_en": "About us",
+            "value_en": ""
           },
           {
             "id": "fa-contacts",
@@ -522,7 +542,9 @@
             "value": "/contacts",
             "type": "link",
             "source": "",
-            "enabled": true
+            "enabled": true,
+            "label_en": "Contacts",
+            "value_en": ""
           },
           {
             "id": "fa-apply",
@@ -530,7 +552,9 @@
             "value": "/become-a-model",
             "type": "link",
             "source": "",
-            "enabled": true
+            "enabled": true,
+            "label_en": "Become a model",
+            "value_en": ""
           },
           {
             "id": "fa-booking",
@@ -538,9 +562,12 @@
             "value": "/booking",
             "type": "link",
             "source": "",
-            "enabled": true
+            "enabled": true,
+            "label_en": "Book a model",
+            "value_en": ""
           }
-        ]
+        ],
+        "title_en": "Agency"
       },
       {
         "id": "footer-contacts",
@@ -556,7 +583,9 @@
             "value": "info@grace-models.ru",
             "type": "email",
             "source": "email",
-            "enabled": true
+            "enabled": true,
+            "label_en": "",
+            "value_en": ""
           },
           {
             "id": "fc-phone",
@@ -564,7 +593,9 @@
             "value": "",
             "type": "phone",
             "source": "phone",
-            "enabled": true
+            "enabled": true,
+            "label_en": "",
+            "value_en": ""
           },
           {
             "id": "fc-city",
@@ -572,9 +603,12 @@
             "value": "Москва",
             "type": "text",
             "source": "city",
-            "enabled": true
+            "enabled": true,
+            "label_en": "",
+            "value_en": "Moscow"
           }
-        ]
+        ],
+        "title_en": "Get in touch"
       },
       {
         "id": "footer-details",
@@ -590,7 +624,9 @@
             "value": "ООО «Грейс Модельс»",
             "type": "text",
             "source": "",
-            "enabled": true
+            "enabled": true,
+            "label_en": "",
+            "value_en": "Grace Models LLC"
           },
           {
             "id": "fd-inn",
@@ -598,7 +634,9 @@
             "value": "7706548391",
             "type": "text",
             "source": "",
-            "enabled": true
+            "enabled": true,
+            "label_en": "Tax ID (INN)",
+            "value_en": ""
           },
           {
             "id": "fd-ogrn",
@@ -606,7 +644,9 @@
             "value": "1047796616471",
             "type": "text",
             "source": "",
-            "enabled": true
+            "enabled": true,
+            "label_en": "Registration number (OGRN)",
+            "value_en": ""
           },
           {
             "id": "fd-address",
@@ -614,11 +654,57 @@
             "value": "125047, Москва Город, 1-я Брестская Улица, дом 33, стр. 2, кв./офис 40",
             "type": "address",
             "source": "",
-            "enabled": true
+            "enabled": true,
+            "label_en": "Address",
+            "value_en": "Office 40, 33, bldg. 2, 1st Brestskaya Street, Moscow, 125047, Russia"
           }
-        ]
+        ],
+        "title_en": "Company details"
       }
-    ]
+    ],
+    "locale_schema": 1,
+    "pages": {
+      "main": {
+        "title": "",
+        "title_en": ""
+      },
+      "new": {
+        "title": "",
+        "title_en": ""
+      },
+      "international": {
+        "title": "",
+        "title_en": ""
+      },
+      "direct": {
+        "title": "",
+        "title_en": ""
+      },
+      "shortlist": {
+        "title": "",
+        "title_en": ""
+      },
+      "about": {
+        "title": "Смотреть глубже.",
+        "title_en": "Look beyond."
+      },
+      "contacts": {
+        "title": "На связи.",
+        "title_en": "In touch."
+      },
+      "news": {
+        "title": "",
+        "title_en": ""
+      },
+      "application": {
+        "title": "",
+        "title_en": ""
+      },
+      "booking": {
+        "title": "",
+        "title_en": ""
+      }
+    }
   },
   "contacts": {
     "version": "2.4-default",
@@ -645,5 +731,106 @@
         "enabled": true
       }
     ]
+  },
+  "translations": {
+    "Модели": "Models",
+    "Основной борд": "Main board",
+    "Новые лица": "New faces",
+    "Международные": "International",
+    "Привоз": "Direct",
+    "Контакты": "Contacts",
+    "О нас": "About us",
+    "Агентство": "Agency",
+    "Стать моделью": "Become a model",
+    "Бронировать модель": "Book a model",
+    "Бронирование": "Booking",
+    "Букинг": "Booking",
+    "Новости": "News",
+    "Журнал": "News",
+    "Избранное": "Shortlist",
+    "Связаться": "Get in touch",
+    "Реквизиты": "Company details",
+    "ИНН": "Tax ID (INN)",
+    "ОГРН": "Registration number (OGRN)",
+    "Адрес": "Address",
+    "Телефон": "Phone",
+    "Электронная почта": "Email",
+    "Москва": "Moscow",
+    "ООО «Грейс Модельс»": "Grace Models LLC",
+    "ООО «Грейс Моделс»": "Grace Models LLC",
+    "125047, Москва Город, 1-я Брестская Улица, дом 33, стр. 2, кв./офис 40": "Office 40, 33, bldg. 2, 1st Brestskaya Street, Moscow, 125047, Russia",
+    "125047, Москва Город, 1-я Брестская Улица, дом 33, стр. 2": "33, bldg. 2, 1st Brestskaya Street, Moscow, 125047, Russia"
+  },
+  "page_defaults": {
+    "main": {
+      "label": "Основной борд",
+      "title": "",
+      "title_en": "",
+      "fallback": "Модели",
+      "fallback_en": "Models"
+    },
+    "new": {
+      "label": "Новые лица",
+      "title": "",
+      "title_en": "",
+      "fallback": "Новые лица",
+      "fallback_en": "New faces"
+    },
+    "international": {
+      "label": "Международные",
+      "title": "",
+      "title_en": "",
+      "fallback": "Международные",
+      "fallback_en": "International"
+    },
+    "direct": {
+      "label": "Привоз",
+      "title": "",
+      "title_en": "",
+      "fallback": "Привоз",
+      "fallback_en": "Direct"
+    },
+    "shortlist": {
+      "label": "Избранное",
+      "title": "",
+      "title_en": "",
+      "fallback": "Избранное",
+      "fallback_en": "Shortlist"
+    },
+    "about": {
+      "label": "О нас",
+      "title": "Смотреть глубже.",
+      "title_en": "Look beyond.",
+      "fallback": "О нас",
+      "fallback_en": "About us"
+    },
+    "contacts": {
+      "label": "Контакты",
+      "title": "На связи.",
+      "title_en": "In touch.",
+      "fallback": "Контакты",
+      "fallback_en": "Contacts"
+    },
+    "news": {
+      "label": "Новости",
+      "title": "",
+      "title_en": "",
+      "fallback": "Новости",
+      "fallback_en": "News"
+    },
+    "application": {
+      "label": "Стать моделью",
+      "title": "",
+      "title_en": "",
+      "fallback": "Стать моделью",
+      "fallback_en": "Become a model"
+    },
+    "booking": {
+      "label": "Бронирование",
+      "title": "",
+      "title_en": "",
+      "fallback": "Бронирование",
+      "fallback_en": "Book a model"
+    }
   }
 }

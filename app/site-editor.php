@@ -8,8 +8,15 @@ function grace_site_defaults(): array {
 }
 function grace_public_email(string $text): string { return str_ireplace('info@grace-models.com','info@grace-models.ru',$text); }
 function grace_editor_data(bool $private=false): array {
-    $settings=grace_settings();$layout=grace_layout();$navigation=[];
-    foreach ($layout['navigation'] as $item) { $html=grace_item_html($item,$settings);if ($html!=='') $navigation[]=['html'=>$html,'placement'=>$item['placement']]; }
+    $settings=grace_settings();$layout=grace_layout();$forms=grace_forms();$titles=grace_page_titles($layout,$forms);
+    $chrome=['logo'=>grace_logo_html($settings),'locales'=>[]];
+    foreach (['ru','en'] as $lang) {
+        $navigation=[];
+        foreach ($layout['navigation'] as $item) { $html=grace_item_html($item,$settings,$lang);if ($html!=='') $navigation[]=['html'=>$html,'placement'=>$item['placement']]; }
+        $chrome['locales'][$lang]=['navigation'=>$navigation,'footer'=>grace_footer_html($lang,$settings,$layout)];
+    }
+    // Keep the Russian aliases for admin screens and previously cached clients.
+    $chrome=[...$chrome,...$chrome['locales']['ru']];
     $contacts=grace_team_contacts();
     if (!$private) {
         $contacts['items']=array_values(array_filter($contacts['items'],fn($person)=>$person['enabled']));
@@ -17,7 +24,7 @@ function grace_editor_data(bool $private=false): array {
         $layout['footer']=array_values(array_filter($layout['footer'],fn($block)=>$block['enabled']));
         foreach ($layout['footer'] as &$block) $block['items']=array_values(array_filter($block['items'],fn($item)=>$item['enabled']));unset($block);
     }
-    return ['forms'=>grace_forms(),'layout'=>$layout,'contacts'=>$contacts,'chrome'=>['logo'=>grace_logo_html($settings),'footer'=>grace_footer_html(),'navigation'=>$navigation]];
+    return ['forms'=>$forms,'layout'=>$layout,'page_titles'=>$titles,'contacts'=>$contacts,'chrome'=>$chrome];
 }
 function grace_migrate_legal_contact(PDO $pdo, array $config): void {
     // Publish a new active revision; signed historical documents remain immutable.
@@ -49,7 +56,7 @@ function grace_forms(): array {
     if (!is_file(GRACE_ROOT.'/config.php')) return grace_site_defaults()['forms'];
     return ['application'=>grace_setting('form_application') ?? grace_site_defaults()['forms']['application'],'booking'=>grace_setting('form_booking') ?? grace_site_defaults()['forms']['booking']];
 }
-function grace_layout(): array { return is_file(GRACE_ROOT.'/config.php')?(grace_setting('site_layout') ?? grace_site_defaults()['layout']):grace_site_defaults()['layout']; }
+function grace_layout(): array { return grace_localized_layout(is_file(GRACE_ROOT.'/config.php')?(grace_setting('site_layout') ?? grace_site_defaults()['layout']):grace_site_defaults()['layout']); }
 function grace_team_contacts(): array { return is_file(GRACE_ROOT.'/config.php')?(grace_setting('contact_people') ?? grace_site_defaults()['contacts']):grace_site_defaults()['contacts']; }
 function grace_publish_contacts(array $input): array {
     $items=$input['items'] ?? null;
@@ -141,17 +148,17 @@ function grace_form_submission(string $kind, array $input, array $files): array 
     if ($minor && !filter_var($input['guardian_consent'] ?? false,FILTER_VALIDATE_BOOLEAN)) grace_error('Для анкеты до 18 лет подтвердите отметку о согласии родителя или законного представителя.');
     return ['custom_data'=>json_encode(['form_title'=>$form['title'],'form_version'=>$form['version'],'fields'=>$extra,'guardian_label'=>$minor?$form['guardian_label']:''],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),'guardian_consent'=>$minor?1:null,'guardian_consent_at'=>$minor?grace_now():''];
 }
-function grace_layout_item(array $input, bool $navigation=false): array {
+function grace_layout_item(array $input, bool $navigation=false, ?array $previous=null): array {
     $id=grace_text($input['id'] ?? '',64);if (!preg_match('/^[a-zA-Z0-9_-]{1,64}$/',$id)) grace_error('Неверный идентификатор блока.');
     $type=$input['type'] ?? 'text';if (!in_array($type,['link','text','phone','email','address'],true)) grace_error('Неверный тип блока.');
-    $value=grace_public_email(grace_text($input['value'] ?? '',1500));$source=$input['source'] ?? '';
+    $value=grace_public_email(grace_text($input['value'] ?? '',1500));$englishValue=grace_public_email(grace_text($input['value_en'] ?? $previous['value_en'] ?? '',1500));$source=$input['source'] ?? '';
     if (!in_array($source,['','email','phone','city','telegram','instagram','vk'],true)) grace_error('Проверьте источник контакта.');
-    if ($source==='') {
-        if ($type==='link' && $value!=='' && !grace_editor_link_allowed($value)) grace_error('Ссылка должна начинаться с /, https:// или http://.');
-        if ($type==='email' && $value!=='' && !filter_var($value,FILTER_VALIDATE_EMAIL)) grace_error('Проверьте адрес электронной почты.');
-        if ($type==='phone' && $value!=='' && !preg_match('/^[+0-9() .-]{3,60}$/',$value)) grace_error('Проверьте номер телефона.');
+    if ($source==='') foreach ([$value,$englishValue] as $candidate) {
+        if ($type==='link' && $candidate!=='' && !grace_editor_link_allowed($candidate)) grace_error('Ссылка должна начинаться с /, https:// или http://.');
+        if ($type==='email' && $candidate!=='' && !filter_var($candidate,FILTER_VALIDATE_EMAIL)) grace_error('Проверьте адрес электронной почты.');
+        if ($type==='phone' && $candidate!=='' && !preg_match('/^[+0-9() .-]{3,60}$/',$candidate)) grace_error('Проверьте номер телефона.');
     }
-    $record=['id'=>$id,'type'=>$type,'value'=>$value,'source'=>$source,'label'=>grace_public_email(grace_text($input['label'] ?? '',250)),'enabled'=>(bool)filter_var($input['enabled'] ?? true,FILTER_VALIDATE_BOOLEAN)];
+    $record=['id'=>$id,'type'=>$type,'value'=>$value,'value_en'=>$englishValue,'source'=>$source,'label'=>grace_public_email(grace_text($input['label'] ?? '',250)),'label_en'=>grace_public_email(grace_text($input['label_en'] ?? $previous['label_en'] ?? '',250)),'enabled'=>(bool)filter_var($input['enabled'] ?? true,FILTER_VALIDATE_BOOLEAN)];
     if ($navigation) { $record['placement']=($input['placement'] ?? '')==='actions'?'actions':'main'; }
     return $record;
 }
@@ -168,17 +175,25 @@ function grace_publish_layout(array $input): array {
         $items=[];$seen=[];
         foreach ($input[$section] as $block) {
             if (!is_array($block)) grace_error('Проверьте описание блока.');
-            if ($section==='navigation') $record=grace_layout_item($block,true);
+            if ($section==='navigation') $record=grace_layout_item($block,true,array_column($current['navigation'],null,'id')[$block['id'] ?? ''] ?? null);
             else {
                 $id=grace_text($block['id'] ?? '',64);if (!preg_match('/^[a-zA-Z0-9_-]{1,64}$/',$id)) grace_error('Проверьте идентификатор блока.');
                 $children=$block['items'] ?? [];if (!is_array($children) || !array_is_list($children) || count($children)>30) grace_error('В блоке может быть до 30 элементов.');
                 $childIds=[];$childOut=[];
-                foreach ($children as $child) { if (!is_array($child)) grace_error('Проверьте элемент блока.');$clean=grace_layout_item($child);if (isset($childIds[$clean['id']])) grace_error('Повторяющийся элемент блока.');$childIds[$clean['id']]=true;$childOut[]=$clean; }
-                $record=['id'=>$id,'title'=>grace_public_email(grace_text($block['title'] ?? '',250)),'kind'=>($block['kind'] ?? '')==='brand'?'brand':'content','align'=>in_array($block['align'] ?? '',['left','center','right'],true)?$block['align']:'left','width'=>max(1,min(4,(int)($block['width'] ?? 1))),'enabled'=>(bool)filter_var($block['enabled'] ?? true,FILTER_VALIDATE_BOOLEAN),'items'=>$childOut];
+                $previous=array_column($current['footer'],null,'id')[$id] ?? null;$previousItems=array_column($previous['items'] ?? [],null,'id');
+                foreach ($children as $child) { if (!is_array($child)) grace_error('Проверьте элемент блока.');$clean=grace_layout_item($child,false,$previousItems[$child['id'] ?? ''] ?? null);if (isset($childIds[$clean['id']])) grace_error('Повторяющийся элемент блока.');$childIds[$clean['id']]=true;$childOut[]=$clean; }
+                $record=['id'=>$id,'title'=>grace_public_email(grace_text($block['title'] ?? '',250)),'title_en'=>grace_public_email(grace_text($block['title_en'] ?? $previous['title_en'] ?? '',250)),'kind'=>($block['kind'] ?? '')==='brand'?'brand':'content','align'=>in_array($block['align'] ?? '',['left','center','right'],true)?$block['align']:'left','width'=>max(1,min(4,(int)($block['width'] ?? 1))),'enabled'=>(bool)filter_var($block['enabled'] ?? true,FILTER_VALIDATE_BOOLEAN),'items'=>$childOut];
             }
             if (isset($seen[$record['id']])) grace_error('Повторяющийся блок.');$seen[$record['id']]=true;$items[]=$record;
         }
         $out[$section]=$items;
+    }
+    if (array_key_exists('pages',$input)) {
+        if (!is_array($input['pages'])) grace_error('Проверьте названия страниц.');
+        foreach ($input['pages'] as $key=>$page) {
+            if (!isset(grace_site_defaults()['page_defaults'][$key]) || !is_array($page)) grace_error('Неизвестная страница.');
+            $out['pages'][$key]=['title'=>grace_public_email(grace_text($page['title'] ?? '',250)),'title_en'=>grace_public_email(grace_text($page['title_en'] ?? '',250))];
+        }
     }
     return grace_editor_save('site_layout',$out,grace_text($input['expected_version'] ?? '',100));
 }
@@ -188,24 +203,28 @@ function grace_logo_html(?array $settings=null): string {
     $original=$url==='/images/grace-models-logo-original.jpg';
     return '<span class="grace-logo'.($original?' grace-logo-original':'').'"><img src="'.grace_escape($url).'" alt="'.grace_escape($settings['name']).'" '.($original?'width="1783" height="1364"':'').' decoding="async"></span>';
 }
-function grace_item_html(array $item, array $settings): string {
+function grace_item_html(array $item, array $settings, string $lang='ru'): string {
     if (!$item['enabled']) return '';
-    $value=grace_public_email((string)(($item['source'] ?? '')!==''?($settings[$item['source']] ?? ''):$item['value']));
+    $source=$item['source'] ?? '';
+    $value=grace_public_email($source!==''?($source==='city'?grace_localized($settings,'city',$lang):(string)($settings[$source] ?? '')):grace_localized($item,'value',$lang));
     if ($value==='') return '';
     if (parse_url($value,PHP_URL_PATH)==='/become-a-model' && !$settings['applications_enabled']) return '';
-    $label=$item['label'] ?: $value;$type=$item['type'];
+    $caption=grace_localized($item,'label',$lang);$label=$caption ?: $value;$type=$item['type'];
     if ($type==='link' && !grace_editor_link_allowed($value)) return '';
-    $href=match($type) {'link'=>$value,'phone'=>'tel:'.preg_replace('/[^+0-9]/','',$value),'email'=>'mailto:'.$value,default=>''};
+    $href=match($type) {'link'=>grace_language_href($value,$lang),'phone'=>'tel:'.preg_replace('/[^+0-9]/','',$value),'email'=>'mailto:'.$value,default=>''};
     if ($href!=='') return '<a href="'.grace_escape($href).'"'.($type==='link' && str_starts_with($href,'/') && !preg_match('#^/(consent|privacy|cookies)(?:[/?]|$)#',$href)?' data-route':'').'>'.grace_escape($label).'</a>';
-    return '<span class="chrome-text">'.($item['label']!==''?'<span class="chrome-item-label">'.grace_escape($item['label']).': </span>':'').nl2br(grace_escape($value)).'</span>';
+    return '<span class="chrome-text">'.($caption!==''?'<span class="chrome-item-label">'.grace_escape($caption).': </span>':'').nl2br(grace_escape($value)).'</span>';
 }
-function grace_footer_html(): string {
-    $settings=is_file(GRACE_ROOT.'/config.php')?grace_settings():grace_seed()['settings'];$layout=grace_layout();$blocks='';
+function grace_footer_html(string $lang='ru', ?array $settings=null, ?array $layout=null): string {
+    $lang=$lang==='en'?'en':'ru';
+    $settings ??= is_file(GRACE_ROOT.'/config.php')?grace_settings():grace_seed()['settings'];$layout ??= grace_layout();$blocks='';
     foreach ($layout['footer'] as $block) {
         if (!$block['enabled']) continue;
-        $body=$block['kind']==='brand'?'<a class="chrome-brand" href="/" data-route>'.grace_logo_html($settings).'</a><p>'.grace_escape($settings['tagline']).'</p>':'';
-        foreach ($block['items'] as $item) $body.=grace_item_html($item,$settings);
-        $blocks.='<section class="chrome-footer-block align-'.$block['align'].' width-'.$block['width'].'">'.($block['title']!==''?'<h2>'.grace_escape($block['title']).'</h2>':'').$body.'</section>';
+        $body=$block['kind']==='brand'?'<a class="chrome-brand" href="'.grace_language_href('/',$lang).'" data-route>'.grace_logo_html($settings).'</a><p>'.grace_escape(grace_localized($settings,'tagline',$lang)).'</p>':'';
+        foreach ($block['items'] as $item) $body.=grace_item_html($item,$settings,$lang);
+        $title=grace_localized($block,'title',$lang);
+        $blocks.='<section class="chrome-footer-block align-'.$block['align'].' width-'.$block['width'].'">'.($title!==''?'<h2>'.grace_escape($title).'</h2>':'').$body.'</section>';
     }
-    return '<footer class="site-footer chrome-footer"><div class="chrome-footer-grid">'.$blocks.'</div><div class="chrome-footer-bottom"><span>© '.gmdate('Y').' '.grace_escape($settings['name']).'</span><a href="/consent">Согласие на обработку данных</a><a href="/privacy">Политика конфиденциальности</a><a href="/cookies">Файлы cookie</a><button type="button" class="cookie-settings-link" data-cookie-settings>Настройки cookie</button></div></footer>';
+    $copy=$lang==='en'?['Personal data processing consent','Privacy policy','Cookies','Cookie preferences']:['Согласие на обработку данных','Политика конфиденциальности','Файлы cookie','Настройки cookie'];
+    return '<footer class="site-footer chrome-footer"><div class="chrome-footer-grid">'.$blocks.'</div><div class="chrome-footer-bottom"><span>© '.gmdate('Y').' '.grace_escape($settings['name']).'</span><a href="'.grace_language_href('/consent',$lang).'">'.$copy[0].'</a><a href="'.grace_language_href('/privacy',$lang).'">'.$copy[1].'</a><a href="'.grace_language_href('/cookies',$lang).'">'.$copy[2].'</a><button type="button" class="cookie-settings-link" data-cookie-settings>'.$copy[3].'</button></div></footer>';
 }

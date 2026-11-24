@@ -6,7 +6,7 @@
 
 В архиве уже лежат файлы для загрузки в `public_html` / `www`. Сборку на хостинге запускать не нужно.
 
-**[Скачать обновление 2.4.1 для установленной версии 2.4](https://raw.githubusercontent.com/stisvladnext3-creator/gracemodels/main/grace-models-php-update-v2.4.1.zip)** · [Что изменилось и как загрузить](UPDATE_PHP_V2_4_1.md).
+**[Скачать обновление 2.5 для установленной PHP-версии](https://raw.githubusercontent.com/stisvladnext3-creator/gracemodels/main/grace-models-php-update-v2.5.zip)** · [Что изменилось и как загрузить](UPDATE_PHP_V2_5.md).
 
 ## Установка
 
@@ -49,4 +49,6 @@
 
 Демонстрационные анкеты и фотографии можно заменить через панель. Источники изображений перечислены в `public/images/assets.json`. Исходные тексты правовых документов находятся в `app/legal-defaults.json`, действующие тексты и история хранятся в базе и изменяются в кабинете. Сведения о cookie — в `public/cookies.html`.
 
-Полная справка по кабинету в Word: [скачать DOCX](https://raw.githubusercontent.com/stisvladnext3-creator/gracemodels/ca2b9aa4032854875f04497aeff4c55e4f1f679a/docs/Grace-Models-Admin-Guide.docx).
+Справка по кабинету версии 2.4 в Word: [скачать DOCX](https://raw.githubusercontent.com/stisvladnext3-creator/gracemodels/ca2b9aa4032854875f04497aeff4c55e4f1f679a/docs/Grace-Models-Admin-Guide.docx).
+
+В версии 2.5 меню, футер и заголовки страниц поддерживают ручные версии RU/EN. Настройки находятся в «Меню и футер». [Инструкция](UPDATE_PHP_V2_5.md).

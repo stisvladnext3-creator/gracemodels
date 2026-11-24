@@ -95,6 +95,6 @@ function grace_legal_page(string $key): never {
     $document=grace_legal_document($key,$requested);
     $updated=preg_match('/^(\d{4}-\d{2}-\d{2})/',$document['version'],$date)?(new DateTimeImmutable($date[1]))->format('d.m.Y'):(new DateTimeImmutable($document['created_at'] ?: 'now'))->setTimezone(new DateTimeZone('Europe/Moscow'))->format('d.m.Y');
     $html=(string)file_get_contents(GRACE_ROOT.'/public/legal-document.html');
-    $html=strtr($html,['{{UPDATED}}'=>$updated,'{{TITLE}}'=>grace_escape($document['title']),'{{VERSION}}'=>grace_escape($document['version']),'{{BODY}}'=>grace_legal_body($document['body']),'{{SITE_FOOTER}}'=>grace_footer_html(),'{{SITE_LOGO}}'=>grace_logo_html()]);
+    $html=strtr($html,['{{UPDATED}}'=>$updated,'{{TITLE}}'=>grace_escape($document['title']),'{{VERSION}}'=>grace_escape($document['version']),'{{BODY}}'=>grace_legal_body($document['body']),...grace_chrome_template_values(grace_request_language())]);
     grace_html($html);
 }

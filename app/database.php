@@ -58,15 +58,16 @@ function grace_upgrade_database(PDO $pdo, array $config): void {
     grace_legal_schema($pdo,$config);
     grace_seed_legal($pdo,$config);
     grace_editor_seed($pdo,$config);
+    if ((int)$stored<7) grace_migrate_layout_locales($pdo,$config);
     $statement=$pdo->query("SELECT setting_value FROM $settings WHERE setting_key='agency'");
     $agency=json_decode((string)$statement->fetchColumn(),true,64,JSON_THROW_ON_ERROR);
-    if (is_array($agency)) {
+    if ((int)$stored<6 && is_array($agency)) {
         $agency['email']='info@grace-models.ru';
         $agency['about_image'] ??= $agency['hero_image'] ?? '/images/woman-02.jpg';
         $agency['logo_url'] ??= '/images/grace-models-logo-original.jpg';
         $pdo->prepare("UPDATE $settings SET setting_value=? WHERE setting_key='agency'")->execute([json_encode($agency,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)]);
     }
-    grace_migrate_legal_contact($pdo,$config);
+    if ((int)$stored<6) grace_migrate_legal_contact($pdo,$config);
     $pdo->exec("UPDATE $settings SET setting_value='".GRACE_SCHEMA_VERSION."' WHERE setting_key='schema_version'");
 }
 function grace_table(string $name, ?array $config = null): string {

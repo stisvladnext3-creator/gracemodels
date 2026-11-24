@@ -132,6 +132,13 @@ try:
         before=api('/api/public');saved_config=(site/'config.php').read_bytes()
         previous_headers,_=expect('/api/studio/login',method='POST',data={'login':admin,'password':password})
         previous_cookie=previous_headers['Set-Cookie'].split(';')[0]
+        prior_layout=None
+        if 'layout' in before:
+            prior_layout=json.loads(json.dumps(api('/api/studio/data',cookie=previous_cookie)['layout']))
+            next(item for item in prior_layout['navigation'] if item['id']=='nav-models')['label']='Основной борд'
+            prior_layout['footer']=[block for block in prior_layout['footer'] if block['id']!='footer-models']
+            api('/api/studio/layout',method='PUT',cookie=previous_cookie,data={'navigation':prior_layout['navigation'],'footer':prior_layout['footer'],'expected_version':prior_layout['version']})
+            prior_layout=api('/api/studio/data',cookie=previous_cookie)['layout']
         consent_match=re.search(r"const GRACE_CONSENT_VERSION = '([^']+)'",(site/'app/bootstrap.php').read_text());legacy_version=consent_match.group(1) if consent_match else '2026-11-21'
         legacy=upload('/api/inquiries',{'kind':'booking','name':'Legacy inquiry','email':'legacy@example.test','phone':'+70000000000','consent':'yes','consent_version':legacy_version},[])
         previous=next(i for i in api('/api/studio/data',cookie=previous_cookie)['inquiries'] if i['id']==legacy['id'])
@@ -143,9 +150,18 @@ try:
         check('upgrade adds candidate fields without inventing data',old['telegram']=='' and old['birth_date']=='' and old['bust'] is None and old['file_link']=='')
         check('upgrade preserves hosting credentials and admin URL',(site/'config.php').read_bytes()==saved_config)
         check('new fields appear after automatic migration',all('bust_cup' in m for m in after['models']))
-        check('upgrade does not invent minor confirmations or custom answers',old['guardian_consent'] is None and not old['custom_data'])
+        check('upgrade preserves prior minor confirmations and custom answers',old['guardian_consent']==previous.get('guardian_consent') and old['custom_data']==previous.get('custom_data',[]))
+        if prior_layout:
+            migrated=after['layout']
+            check('locale migration preserves edited navigation and removed footer blocks',[item['id'] for item in migrated['navigation']]==[item['id'] for item in prior_layout['navigation']] and [block['id'] for block in migrated['footer']]==[block['id'] for block in prior_layout['footer']] and migrated['navigation'][0]['label']=='Основной борд')
+            check('existing board rename becomes both Russian and English page titles',after['page_titles']['ru']['main']=='Основной борд' and after['page_titles']['en']['main']=='Main board')
+            check('locale migration invalidates old editor revisions',migrated['version']!=prior_layout['version'])
         api('/api/studio/inquiries/'+legacy['id'],method='DELETE',cookie=previous_cookie)
         for captured in mail_directory.glob('*.eml'):captured.unlink()
+        # The migration fixture is separate from the later submission-limit tests.
+        # Clear only its inquiry counter in this disposable local test database.
+        reset_code="define('GRACE_ROOT',$argv[1]); require GRACE_ROOT.'/app/bootstrap.php'; grace_query('DELETE FROM '.grace_table('request_limits').' WHERE limiter_key LIKE ?',['inquiry:%']);"
+        subprocess.run([args.php,'-c',args.ini,'-r',reset_code,str(site)],env=env,capture_output=True,check=True)
     check('installer locks after setup',request('/install.php')[0]==404)
     check('private files are outside document root',(temporary/'private-data').is_dir() and not (site/'private-data').exists())
     public=api('/api/public');check('Grace Models name and demo catalogue load',public['settings']['name']=='Grace Models' and len(public['models'])==12)
@@ -195,7 +211,7 @@ try:
     check('full consent names the operator, address and withdrawal email',all(value in legal_text for value in ['7706548391','1047796616471','Брестская','info@grace-models.ru','10 (десяти) рабочих дней','3 (трех) лет','бронирование','grace-models.ru']))
     _,policy=expect('/privacy');check('privacy policy is separate from consent','Политика конфиденциальности'.encode() in policy and b'href="/consent"' in policy)
     _,cookies=expect('/cookies');check('cookie policy explains actual cookies and local storage',all(value in cookies.decode() for value in ['grace_cookie_choice','grace_models_admin','forma-language','forma-shortlist','Настройки cookie']))
-    for path in ['/cookies.js','/cookies.css','/model-options.js','/legal.css','/images/grace-models-logo-original.jpg','/form-fields.js','/chrome.css']:expect(path)
+    for path in ['/cookies.js','/cookies.css','/model-options.js','/legal.css','/images/grace-models-logo-original.jpg','/form-fields.js','/site-locale.js','/chrome.css']:expect(path)
     check('new public assets are accessible',True)
     for path in ['/config.php','/app/bootstrap.php','/app/seed.json','/app/mail.php','/app/site-editor.php','/tools/send-notifications.php','/public/admin.html','/.git/config','/backup/data.json']:
         check('blocked '+path,request(path)[0] in [403,404])
@@ -337,6 +353,34 @@ try:
     old_layout_version=layout['version']
     layout=api('/api/studio/layout',method='PUT',cookie=cookie,data={'navigation':layout['navigation'],'expected_version':layout['version']})
     expect('/api/studio/layout',method='PUT',cookie=cookie,data={'footer':layout['footer'],'expected_version':old_layout_version},status=409)
+    locale_layout=api('/api/studio/data',cookie=cookie)['layout']
+    main_item=next(item for item in locale_layout['navigation'] if item['id']=='nav-models')
+    main_item['label']='Основной борд';main_item['label_en']='Main board'
+    locale_layout=api('/api/studio/layout',method='PUT',cookie=cookie,data={'navigation':locale_layout['navigation'],'expected_version':locale_layout['version']})
+    localization=api('/api/public')
+    check('menu labels drive catalog titles in both languages',localization['page_titles']['ru']['main']=='Основной борд' and localization['page_titles']['en']['main']=='Main board' and any('Основной борд' in item['html'] for item in localization['chrome']['locales']['ru']['navigation']) and any('Main board' in item['html'] for item in localization['chrome']['locales']['en']['navigation']))
+    edited_pages={'main':{'title':'Наш основной состав','title_en':'Our main board'},'about':{'title':'Об агентстве Grace','title_en':'About Grace'}}
+    locale_layout=api('/api/studio/layout',method='PUT',cookie=cookie,data={'pages':edited_pages,'expected_version':locale_layout['version']})
+    page_data=api('/api/public')['page_titles']
+    check('page titles can be edited independently in RU and EN',page_data['ru']['main']=='Наш основной состав' and page_data['en']['main']=='Our main board' and page_data['ru']['about']=='Об агентстве Grace' and page_data['en']['about']=='About Grace')
+    locale_layout=api('/api/studio/layout',method='PUT',cookie=cookie,data={'pages':{'main':{'title':'','title_en':''}},'expected_version':locale_layout['version']})
+    check('clearing a separate page title restores the navigation name',api('/api/public')['page_titles']['ru']['main']=='Основной борд')
+    expect('/api/studio/layout',method='PUT',cookie=cookie,data={'pages':{'unknown-page':{'title':'Bad'}},'expected_version':locale_layout['version']},status=400)
+    locale_footer=locale_layout['footer'];translated_block=next(block for block in locale_footer if block['id']=='test-footer')
+    translated_block['title_en']='Booking office'
+    translated_block['items'][0]['label_en']='Office';translated_block['items'][0]['value_en']='42 Test Street'
+    translated_block['items'][1]['value_en']='<img src=x onerror=alert(1)>'
+    locale_layout=api('/api/studio/layout',method='PUT',cookie=cookie,data={'footer':locale_footer,'expected_version':locale_layout['version']})
+    bilingual=api('/api/public')['chrome']['locales'];english=bilingual['en']['footer'];russian=bilingual['ru']['footer']
+    check('footer renders manually entered EN text, headers and standard links','Booking office' in english and 'Office: ' in english.replace('</span>','') and '42 Test Street' in english and 'Personal data processing consent' in english and 'Privacy policy' in english and 'Cookie preferences' in english and '/privacy?lang=en' in english and 'Адрес букинга' in russian and 'Тестовый адрес 42' in russian)
+    check('English footer values are escaped and contacts keep their types','&lt;img src=x onerror=alert(1)&gt;' in english and '<img src=x onerror=alert(1)>' not in english and 'mailto:info@grace-models.ru' in english)
+    for route in ['/consent?lang=en','/privacy?lang=en','/cookies?lang=en']:
+        _,page=expect(route);check('English footer survives opening '+route,b'Booking office' in page and b'Cookie preferences' in page and b'Back to home' in page and b'{{HOME_' not in page)
+    for unsafe in ['javascript:alert(1)','//evil.example']:
+        expect('/api/studio/layout',method='PUT',cookie=cookie,data={'navigation':[{**main_item,'value_en':unsafe}],'expected_version':locale_layout['version']},status=400)
+    without_english=[{key:value for key,value in item.items() if key not in ['label_en','value_en']} for item in locale_layout['navigation']]
+    locale_layout=api('/api/studio/layout',method='PUT',cookie=cookie,data={'navigation':without_english,'expected_version':locale_layout['version']})
+    check('older editor payloads preserve existing English labels',next(item for item in locale_layout['navigation'] if item['id']=='nav-models')['label_en']=='Main board')
     people=api('/api/studio/data',cookie=cookie)['contacts']
     check('the three supplied agency Telegram contacts are available',len(people['items'])==3 and people['items'][0]['telegram']=='https://t.me/Yulia_Grace_Models')
     hidden_person={'id':'hidden-scout','name':'Private Scout','role':'Скрытый контакт','telegram':'@HiddenScout','enabled':False}
