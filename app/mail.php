@@ -25,8 +25,9 @@ function grace_mail_rows(array $inquiry): array {
     $date=(new DateTimeImmutable($inquiry['created_at']))->setTimezone(new DateTimeZone('Europe/Moscow'))->format('d.m.Y H:i');
     $rows=[['Тип заявки',$inquiry['kind']==='application'?'Анкета модели':'Бронирование модели'],['Номер заявки',strtoupper(substr($inquiry['id'],0,8))],['Получена',$date.' (Москва)'],['ФИО',$inquiry['name']],['Телефон',$inquiry['phone']],['Электронная почта',$inquiry['email']]];
     if ($inquiry['kind']==='application') {
-        $hair=['blonde'=>'Блонд','light_brown'=>'Русые','brown'=>'Каштановые','black'=>'Чёрные','red'=>'Рыжие','gray'=>'Седые','other'=>'Другой цвет'];
-        $eyes=['brown'=>'Карие','blue'=>'Голубые','green'=>'Зелёные','gray'=>'Серые','hazel'=>'Ореховые','gray_blue'=>'Серо-голубые','gray_green'=>'Серо-зелёные','other'=>'Другой цвет'];
+        $appearance=grace_appearance_options();
+        $hair=array_column($appearance['hair'],1,0);
+        $eyes=array_column($appearance['eyes'],1,0);
         $rows=[...$rows,['Город',$inquiry['city']],['Ник в Телеграм',$inquiry['telegram']],['Возраст, полных лет',$inquiry['age']],['Рост, см',$inquiry['height']],['Обхват груди, см',$inquiry['bust']],['Бюст — чашка',$inquiry['bust_cup']],['Талия, см',$inquiry['waist']],['Бёдра, см',$inquiry['hips']],['Размер обуви',$inquiry['shoe']],['Цвет волос',$hair[$inquiry['hair']] ?? ''],['Цвет глаз',$eyes[$inquiry['eyes']] ?? ''],['Ссылка на файлообменник',$inquiry['file_link']]];
         if (!empty($inquiry['instagram'])) $rows[]=['Соцсеть / портфолио',$inquiry['instagram']];
         if (!empty($inquiry['birth_date'])) $rows[]=['Дата рождения',$inquiry['birth_date']];

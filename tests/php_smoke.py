@@ -132,13 +132,23 @@ try:
         before=api('/api/public');saved_config=(site/'config.php').read_bytes()
         previous_headers,_=expect('/api/studio/login',method='POST',data={'login':admin,'password':password})
         previous_cookie=previous_headers['Set-Cookie'].split(';')[0]
-        prior_layout=None
+        prior_layout=None;prior_form=None
         if 'layout' in before:
             prior_layout=json.loads(json.dumps(api('/api/studio/data',cookie=previous_cookie)['layout']))
-            next(item for item in prior_layout['navigation'] if item['id']=='nav-models')['label']='Основной борд'
+            renamed_board=next(item for item in prior_layout['navigation'] if item['id']=='nav-models');renamed_board['label']='Основной борд'
+            if 'label_en' in renamed_board:renamed_board['label_en']='Main board'
             prior_layout['footer']=[block for block in prior_layout['footer'] if block['id']!='footer-models']
             api('/api/studio/layout',method='PUT',cookie=previous_cookie,data={'navigation':prior_layout['navigation'],'footer':prior_layout['footer'],'expected_version':prior_layout['version']})
             prior_layout=api('/api/studio/data',cookie=previous_cookie)['layout']
+        if 'forms' in before:
+            restore_form=before['forms']['application']
+            edited_form=json.loads(json.dumps(restore_form));edited_form['title']='Анкета кандидата'
+            hair_field=next(field for field in edited_form['fields'] if field['key']=='hair')
+            hair_field.update(label='Волосы кандидата',help='Выберите ваш цвет',required=True,full=True)
+            eye_field=next(field for field in edited_form['fields'] if field['key']=='eyes');eye_field['visible']=False
+            edited_form['fields'].remove(eye_field);edited_form['fields'].insert(0,eye_field)
+            edited_form['fields'].append({'key':'custom_upgrade','type':'select','label':'Опыт','visible':True,'required':False,'options':[['Нет опыта','Нет опыта'],['Есть опыт','Есть опыт']]})
+            prior_form=api('/api/studio/forms/application',method='PUT',cookie=previous_cookie,data={'config':edited_form,'expected_version':restore_form['version']})
         consent_match=re.search(r"const GRACE_CONSENT_VERSION = '([^']+)'",(site/'app/bootstrap.php').read_text());legacy_version=consent_match.group(1) if consent_match else '2026-11-21'
         legacy=upload('/api/inquiries',{'kind':'booking','name':'Legacy inquiry','email':'legacy@example.test','phone':'+70000000000','consent':'yes','consent_version':legacy_version},[])
         previous=next(i for i in api('/api/studio/data',cookie=previous_cookie)['inquiries'] if i['id']==legacy['id'])
@@ -155,7 +165,21 @@ try:
             migrated=after['layout']
             check('locale migration preserves edited navigation and removed footer blocks',[item['id'] for item in migrated['navigation']]==[item['id'] for item in prior_layout['navigation']] and [block['id'] for block in migrated['footer']]==[block['id'] for block in prior_layout['footer']] and migrated['navigation'][0]['label']=='Основной борд')
             check('existing board rename becomes both Russian and English page titles',after['page_titles']['ru']['main']=='Основной борд' and after['page_titles']['en']['main']=='Main board')
-            check('locale migration invalidates old editor revisions',migrated['version']!=prior_layout['version'])
+            if not prior_layout.get('locale_schema'):
+                check('locale migration invalidates old editor revisions',migrated['version']!=prior_layout['version'])
+            else:
+                check('already localized layouts keep their editor revisions',migrated['version']==prior_layout['version'])
+        if prior_form:
+            current_form=after['forms']['application']
+            def without_colour_choices(form):
+                result=json.loads(json.dumps(form))
+                for field in result['fields']:
+                    if field['key'] in ['hair','eyes']:field.pop('options',None)
+                return result
+            check('new colour lists preserve edited labels, order, visibility, required flags and custom questions',without_colour_choices(current_form)==without_colour_choices(prior_form))
+            choices={field['key']:dict(field['options']) for field in current_form['fields'] if field['key'] in ['hair','eyes']}
+            check('existing saved forms receive new colour choices without resaving','strawberry_blonde' in choices['hair'] and 'white' in choices['hair'] and 'blue_green' in choices['eyes'] and 'heterochromia' in choices['eyes'])
+            api('/api/studio/forms/application',method='PUT',cookie=previous_cookie,data={'config':restore_form,'expected_version':current_form['version']})
         api('/api/studio/inquiries/'+legacy['id'],method='DELETE',cookie=previous_cookie)
         for captured in mail_directory.glob('*.eml'):captured.unlink()
         # The migration fixture is separate from the later submission-limit tests.
@@ -256,15 +280,33 @@ try:
     draft['cover']=photo['url'];draft['gallery']=[photo['url']];api('/api/studio/models/'+model_id,method='PUT',data=draft,cookie=cookie)
     stored=next(m for m in api('/api/public')['models'] if m['id']==model_id);check('gallery changes persist',stored['cover']==photo['url'] and stored['gallery']==[photo['url']])
     check('cup, hair, eyes and full name persist independently',stored['bust_cup']=='C' and stored['hair']=='light_brown' and stored['eyes']=='hazel' and stored['name']=='Алёна Смирнова' and stored['bust']==draft['bust'])
+    appearance={field['key']:field['options'] for field in api('/api/public')['forms']['application']['fields'] if field['key'] in ['hair','eyes']}
+    for key,choices in appearance.items():
+        for value,title in choices:
+            api('/api/studio/models/'+model_id,method='PUT',data={**draft,key:value},cookie=cookie)
+            saved=next(model for model in api('/api/public')['models'] if model['id']==model_id)
+            if saved[key]!=value:raise AssertionError('Colour changed during model save: '+key+' '+value)
+    api('/api/studio/models/'+model_id,method='PUT',data=draft,cookie=cookie)
+    check('every screenshot colour and every legacy colour round-trips through the database',True)
     base={'name':'Тестовая заявка','email':'fixture@example.test','phone':'+70000000000','consent':'yes','consent_version':api('/api/public')['documents']['consent']['version'],'message':'Проверка PHP'}
     upload('/api/inquiries',{**base,'kind':'booking','consent':'no'},[],status=400)
     upload('/api/inquiries',{**base,'kind':'booking','consent_version':'outdated'},[],status=409)
     check('server rejects absent consent and outdated consent text',not api('/api/studio/data',cookie=cookie)['inquiries'])
     booking=upload('/api/inquiries',{**base,'kind':'booking','model_id':model_id,'company':'Fixture Brand','shooting_date':'2026-12-01'},[])
-    candidate_fields={**base,'kind':'application','age':'14','guardian_consent':'yes','city':'Тест','telegram':'@fixture_candidate','height':'177','bust':'84','bust_cup':'B','waist':'61','hips':'90','shoe':'39','hair':'light_brown','eyes':'hazel','file_link':'https://files.example.test/portfolio'}
+    candidate_fields={**base,'kind':'application','age':'14','guardian_consent':'yes','city':'Тест','telegram':'@fixture_candidate','height':'177','bust':'84','bust_cup':'B','waist':'61','hips':'90','shoe':'39','hair':'strawberry_blonde','eyes':'blue_green','file_link':'https://files.example.test/portfolio'}
+    colour_code="""define('GRACE_ROOT',$argv[1]); require GRACE_ROOT.'/app/bootstrap.php';
+    $base=json_decode(stream_get_contents(STDIN),true,64,JSON_THROW_ON_ERROR);$count=0;
+    foreach (grace_appearance_options() as $key=>$choices) foreach ($choices as [$value,$label]) {
+        $input=[...$base,$key=>$value];$application=grace_application_data($input);$form=grace_form_submission('application',$input,[]);
+        $rows=array_column(grace_mail_rows([...$input,...$application,...$form,'id'=>'colour-fixture','created_at'=>grace_now()]),1,0);
+        if ($application[$key]!==$value || $rows[$key==='hair'?'Цвет волос':'Цвет глаз']!==$label) throw new RuntimeException('Colour lost from candidate or mail: '.$value);
+        $count++;
+    } echo json_encode(['cases'=>$count]);"""
+    colour_result=subprocess.run([args.php,'-c',args.ini,'-r',colour_code,str(site)],input=json.dumps(candidate_fields).encode(),env=env,capture_output=True,check=True)
+    check('all colours pass saved-form validation and retain their Russian labels in full emails',json.loads(colour_result.stdout)['cases']==sum(map(len,appearance.values())))
     for required in ['name','city','telegram','age','phone','email','consent','guardian_consent']:
         upload('/api/inquiries',{**candidate_fields,required:''},[],status=400)
-    for invalid in [{'age':'13'},{'age':'14.5'},{'shoe':'999'},{'hair':'unknown'},{'file_link':'javascript:alert(1)'}]:
+    for invalid in [{'age':'13'},{'age':'14.5'},{'shoe':'999'},{'hair':'unknown'},{'eyes':'unknown'},{'file_link':'javascript:alert(1)'}]:
         upload('/api/inquiries',{**candidate_fields,**invalid},[],status=400)
     upload('/api/inquiries',candidate_fields,[('photos[]','too-large.png','image/png',b'X'*(3*1024*1024+1))],status=400)
     check('candidate required fields, age and photo limit are enforced on server',len(api('/api/studio/data',cookie=cookie)['inquiries'])==1)
@@ -286,7 +328,7 @@ try:
     check('full candidate mail reaches the three prior recipients plus the new one',sorted(str(message['To']).lower() for message in application_messages)==sorted(['Info@grace-models.com'.lower(),'gracemodelsmail@gmail.com','gracemodelsmoscow@gmail.com','info@grace-models.ru']))
     for message in application_messages:
         text='\n'.join(part.get_content() for part in message.walk() if part.get_content_type()=='text/plain')
-        check('candidate email includes all fields and original photos',all(value in text for value in ['Ник в Телеграм: @fixture_candidate','Город: Тест','Рост, см: 177','Обхват груди, см: 84','Бюст — чашка: B','Талия, см: 61','Бёдра, см: 90','Размер обуви: 39','Цвет волос: Русые','Цвет глаз: Ореховые','Возраст, полных лет: 14','Отметка для кандидата до 18 лет:',candidate_fields['file_link'],base['message'],base['email'],base['phone']]) and sorted(part.get_filename() for part in message.iter_attachments())==['front.png','profile.png'] and all(part.get_payload(decode=True)==png for part in message.iter_attachments()))
+        check('candidate email includes all fields and original photos',all(value in text for value in ['Ник в Телеграм: @fixture_candidate','Город: Тест','Рост, см: 177','Обхват груди, см: 84','Бюст — чашка: B','Талия, см: 61','Бёдра, см: 90','Размер обуви: 39','Цвет волос: Клубничный блонд','Цвет глаз: Голубо-зелёные','Возраст, полных лет: 14','Отметка для кандидата до 18 лет:',candidate_fields['file_link'],base['message'],base['email'],base['phone']]) and sorted(part.get_filename() for part in message.iter_attachments())==['front.png','profile.png'] and all(part.get_payload(decode=True)==png for part in message.iter_attachments()))
     count=len(mail_messages());api('/api/studio/notifications/'+application['id']+'/retry',method='POST',cookie=cookie,data={})
     check('retry does not resend already accepted messages',len(mail_messages())==count)
     private=api('/api/studio/data',cookie=cookie);delivered=next(i for i in private['inquiries'] if i['id']==application['id'])

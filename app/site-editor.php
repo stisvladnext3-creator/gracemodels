@@ -52,9 +52,25 @@ function grace_editor_seed(PDO $pdo, array $config): void {
         $pdo->prepare('INSERT INTO '.grace_table('settings',$config).' (setting_key,setting_value) VALUES (?,?)'.$suffix)->execute([$key,json_encode($value,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)]);
     }
 }
+function grace_appearance_options(): array {
+    static $options;
+    if ($options===null) {
+        $fields=array_column(grace_site_defaults()['forms']['application']['fields'],null,'key');
+        $options=['hair'=>$fields['hair']['options'],'eyes'=>$fields['eyes']['options']];
+    }
+    return $options;
+}
 function grace_forms(): array {
-    if (!is_file(GRACE_ROOT.'/config.php')) return grace_site_defaults()['forms'];
-    return ['application'=>grace_setting('form_application') ?? grace_site_defaults()['forms']['application'],'booking'=>grace_setting('form_booking') ?? grace_site_defaults()['forms']['booking']];
+    $defaults=grace_site_defaults()['forms'];
+    $forms=is_file(GRACE_ROOT.'/config.php')?['application'=>grace_setting('form_application') ?? $defaults['application'],'booking'=>grace_setting('form_booking') ?? $defaults['booking']]:$defaults;
+    // Built-in choices follow the current catalogue without rewriting saved
+    // labels, required flags, field order, custom questions or editor revisions.
+    $appearance=grace_appearance_options();
+    foreach ($forms['application']['fields'] as &$field) {
+        if (isset($appearance[$field['key']])) $field['options']=$appearance[$field['key']];
+    }
+    unset($field);
+    return $forms;
 }
 function grace_layout(): array { return grace_localized_layout(is_file(GRACE_ROOT.'/config.php')?(grace_setting('site_layout') ?? grace_site_defaults()['layout']):grace_site_defaults()['layout']); }
 function grace_team_contacts(): array { return is_file(GRACE_ROOT.'/config.php')?(grace_setting('contact_people') ?? grace_site_defaults()['contacts']):grace_site_defaults()['contacts']; }

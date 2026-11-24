@@ -2,7 +2,7 @@
 declare(strict_types=1);
 if (!defined('GRACE_ROOT')) { http_response_code(404); exit; }
 
-const GRACE_VERSION = '2.5.0';
+const GRACE_VERSION = '2.5.1';
 const GRACE_SCHEMA_VERSION = 7;
 const GRACE_CONSENT_VERSION = '2026-11-23.1';
 const GRACE_COOKIE = 'grace_models_admin';

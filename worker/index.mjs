@@ -1,5 +1,6 @@
 import { seedModels, seedNews, defaultSettings } from './seed.mjs';
 import { getAdminSession, loginAdmin, logoutAdmin, renewAdminSession } from './admin-auth.mjs';
+import { hairColors, eyeColors } from '../public/model-options.js';
 
 export const ADMIN_PATH = '/s/9f27c6a40be34d58a17e6c92';
 const modelFields = ['slug','name','name_en','gender','category','city','height','bust','waist','hips','shoe','hair','eyes','cover','gallery','bio','bio_en','published','featured','demo','sort_order'];
@@ -37,8 +38,8 @@ export function validateModel(input) {
     const n=Number(input[k]??(k==='sort_order'?0:k==='height'?175:k==='shoe'?39:80));
     if(!Number.isFinite(n)||n<min||n>max) throw error('Проверьте поле «'+k+'».'); out[k]=Math.round(n);
   }
-  out.hair=['blonde','brown','black','red','other'].includes(input.hair)?input.hair:'brown';
-  out.eyes=['blue','brown','green','gray','other'].includes(input.eyes)?input.eyes:'brown';
+  out.hair=Object.hasOwn(hairColors,input.hair)?input.hair:'brown';
+  out.eyes=Object.hasOwn(eyeColors,input.eyes)?input.eyes:'brown';
   out.cover=mediaUrl(input.cover);
   out.gallery=JSON.stringify((Array.isArray(input.gallery)?input.gallery:[]).slice(0,24).map(mediaUrl).filter(Boolean));
   out.bio=clean(input.bio,5000);out.bio_en=clean(input.bio_en,5000);

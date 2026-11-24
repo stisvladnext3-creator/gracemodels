@@ -1,21 +1,32 @@
 export const hairColors = {
-  blonde: ['Блонд', 'Blonde'],
-  light_brown: ['Русые', 'Light brown'],
-  brown: ['Каштановые', 'Brown'],
+  auburn: ['Каштаново-рыжие', 'Auburn'],
+  bald: ['Без волос', 'Bald'],
   black: ['Чёрные', 'Black'],
+  blonde: ['Блонд', 'Blond'],
+  brown: ['Каштановые', 'Brown'],
+  dark_blonde: ['Тёмный блонд', 'Dark blond'],
+  dark_brown: ['Тёмно-каштановые', 'Dark brown'],
+  gray: ['Седые', 'Grey'],
+  light_blonde: ['Светлый блонд', 'Light blond'],
+  light_brown: ['Русые', 'Light brown'],
   red: ['Рыжие', 'Red'],
-  gray: ['Седые', 'Gray'],
+  strawberry_blonde: ['Клубничный блонд', 'Strawberry blond'],
+  white: ['Белые', 'White'],
   other: ['Другой цвет', 'Other']
 };
 
 export const eyeColors = {
-  brown: ['Карие', 'Brown'],
+  black: ['Чёрные', 'Black'],
   blue: ['Голубые', 'Blue'],
+  gray_blue: ['Серо-голубые', 'Blue gray'],
+  blue_green: ['Голубо-зелёные', 'Blue green'],
+  brown: ['Карие', 'Brown'],
   green: ['Зелёные', 'Green'],
-  gray: ['Серые', 'Gray'],
+  green_brown: ['Зелёно-карие', 'Green brown'],
+  gray_green: ['Серо-зелёные', 'Green gray'],
+  gray: ['Серые', 'Grey'],
   hazel: ['Ореховые', 'Hazel'],
-  gray_blue: ['Серо-голубые', 'Gray-blue'],
-  gray_green: ['Серо-зелёные', 'Gray-green'],
+  heterochromia: ['Разного цвета (гетерохромия)', 'Veron (heterochromia)'],
   other: ['Другой цвет', 'Other']
 };
 

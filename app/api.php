@@ -27,8 +27,9 @@ function grace_validate_model(array $input): array {
         if (!is_numeric($value) || (float)$value<$min || (float)$value>$max) grace_error('Проверьте поле «'.$key.'».');
         $out[$key]=(int)round((float)$value);
     }
-    $out['hair']=in_array($input['hair'] ?? '',['blonde','light_brown','brown','black','red','gray','other'],true)?$input['hair']:'brown';
-    $out['eyes']=in_array($input['eyes'] ?? '',['blue','brown','green','gray','hazel','gray_blue','gray_green','other'],true)?$input['eyes']:'brown';
+    foreach (grace_appearance_options() as $key=>$options) {
+        $out[$key]=in_array($input[$key] ?? '',array_column($options,0),true)?$input[$key]:'brown';
+    }
     $cup=grace_text($input['bust_cup'] ?? '',10);
     if (!in_array($cup,['','AA','A','B','C','D','DD','E','F','G','H'],true)) grace_error('Выберите размер чашки бюста из списка.');
     $out['bust_cup']=$cup;
@@ -91,7 +92,8 @@ function grace_application_data(array $input): array {
         if ($integer===false || $integer<$min || $integer>$max) grace_error('Проверьте поле «'.$label.'».');
         $data[$key]=$integer;
     }
-    foreach (['hair'=>['blonde','light_brown','brown','black','red','gray','other'],'eyes'=>['blue','brown','green','gray','hazel','gray_blue','gray_green','other'],'bust_cup'=>['AA','A','B','C','D','DD','E','F','G','H']] as $key=>$allowed) {
+    $appearance=array_map(fn($options)=>array_column($options,0),grace_appearance_options());
+    foreach ([...$appearance,'bust_cup'=>['AA','A','B','C','D','DD','E','F','G','H']] as $key=>$allowed) {
         $data[$key]=grace_text($input[$key] ?? '',30);
         if ($data[$key]!=='' && !in_array($data[$key],$allowed,true)) grace_error('Выберите параметры внешности из списка.');
     }
