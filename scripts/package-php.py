@@ -6,7 +6,7 @@ parser=argparse.ArgumentParser();parser.add_argument('--output',default='grace-m
 root=Path(__file__).resolve().parents[1];target=Path(args.output)
 if not target.is_absolute():target=root/target
 files={}
-for name in ['index.php','install.php','.htaccess','.user.ini','INSTALL_PHP.md','UPDATE_PHP_V2_1.md','UPDATE_PHP_V2_2.md','UPDATE_PHP_V2_3.md','UPDATE_PHP_V2_4.md','UPDATE_PHP_V2_4_1.md','UPDATE_PHP_V2_5.md','UPDATE_PHP_V2_5_1.md','SITE_EDITOR.md','MAIL_SETUP.md','LEGAL_DOCUMENTS.md','nginx.example.conf']:
+for name in ['index.php','install.php','.htaccess','.user.ini','INSTALL_PHP.md','UPDATE_PHP_V2_1.md','UPDATE_PHP_V2_2.md','UPDATE_PHP_V2_3.md','UPDATE_PHP_V2_4.md','UPDATE_PHP_V2_4_1.md','UPDATE_PHP_V2_5.md','UPDATE_PHP_V2_5_1.md','UPDATE_PHP_V2_5_2.md','SITE_EDITOR.md','MAIL_SETUP.md','LEGAL_DOCUMENTS.md','nginx.example.conf']:
     files[name]=root/name
 for file in sorted((root/'app').rglob('*')):
     if file.is_file():files[file.relative_to(root).as_posix()]=file

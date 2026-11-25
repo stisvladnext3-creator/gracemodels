@@ -6,7 +6,7 @@
 
 В архиве уже лежат файлы для загрузки в `public_html` / `www`. Сборку на хостинге запускать не нужно.
 
-**[Скачать обновление 2.5.1 для установленной PHP-версии](https://raw.githubusercontent.com/stisvladnext3-creator/gracemodels/main/grace-models-php-update-v2.5.1.zip)** · [Что изменилось и как загрузить](UPDATE_PHP_V2_5_1.md).
+**[Скачать обновление 2.5.2 для установленной PHP-версии](https://raw.githubusercontent.com/stisvladnext3-creator/gracemodels/main/grace-models-php-update-v2.5.2.zip)** · [Что изменилось и как загрузить](UPDATE_PHP_V2_5_2.md).
 
 ## Установка
 

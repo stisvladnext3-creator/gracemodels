@@ -6,8 +6,8 @@ final class GraceMailError extends RuntimeException {}
 
 function grace_mail_recipients(string $kind): array {
     return $kind==='application'
-        ? ['Info@grace-models.com','gracemodelsmail@gmail.com','gracemodelsmoscow@gmail.com','info@grace-models.ru']
-        : ['gracemodelsmoscow@gmail.com','info@grace-models.ru'];
+        ? ['Info@grace-models.com','info@grace-models.ru','gracemodelsmail@gmail.com','gracemodelsmoscow@gmail.com']
+        : ['gracemodelsmoscow@gmail.com'];
 }
 
 function grace_mail_schema(PDO $pdo, array $config): void {
@@ -16,8 +16,12 @@ function grace_mail_schema(PDO $pdo, array $config): void {
 }
 
 function grace_enqueue_mail(string $inquiryId, string $kind, PDO $pdo, array $config): void {
+    $table=grace_table('mail_queue',$config);
+    $suffix=$config['database']['driver']==='mysql'?' ON DUPLICATE KEY UPDATE dedupe_key=dedupe_key':' ON CONFLICT(dedupe_key) DO NOTHING';
+    $insert=$pdo->prepare("INSERT INTO $table (id,dedupe_key,inquiry_id,recipient,status,attempts,next_attempt_at,locked_until,last_error,created_at,sent_at) VALUES (?,?,?,?,?,0,0,0,'',?,'')".$suffix);
     foreach (grace_mail_recipients($kind) as $recipient) {
-        grace_insert('mail_queue',['id'=>grace_id(),'dedupe_key'=>hash('sha256',$inquiryId.':'.strtolower($recipient)),'inquiry_id'=>$inquiryId,'recipient'=>$recipient,'status'=>'pending','attempts'=>0,'next_attempt_at'=>0,'locked_until'=>0,'last_error'=>'','created_at'=>grace_now(),'sent_at'=>''],$pdo,$config);
+        // A manual retry repairs missing recipients without changing sent jobs.
+        $insert->execute([grace_id(),hash('sha256',$inquiryId.':'.strtolower($recipient)),$inquiryId,$recipient,'pending',grace_now()]);
     }
 }
 
@@ -41,7 +45,7 @@ function grace_mail_rows(array $inquiry): array {
     return [...$rows,['Сообщение',$inquiry['message']],['Согласие на обработку данных',!empty($inquiry['consent'])?'Подтверждено':'Не зафиксировано'],['Редакция согласия',$inquiry['consent_version'] ?? ''],['Согласие подтверждено',$inquiry['consent_at'] ?? '']];
 }
 
-function grace_build_mail(array $inquiry, array $job): \PHPMailer\PHPMailer\PHPMailer {
+function grace_build_mail(array $inquiry, array $job, ?array $recipients=null): \PHPMailer\PHPMailer\PHPMailer {
     if (!extension_loaded('ctype')) throw new GraceMailError('Для отправки писем включите расширение PHP Ctype на хостинге.');
     require_once GRACE_ROOT.'/app/vendor/phpmailer/src/Exception.php';
     require_once GRACE_ROOT.'/app/vendor/phpmailer/src/PHPMailer.php';
@@ -68,10 +72,11 @@ function grace_build_mail(array $inquiry, array $job): \PHPMailer\PHPMailer\PHPM
         if (!function_exists('mail')) throw new GraceMailError('Функция mail недоступна. Настройте SMTP в config.php.');
         $mailer->isMail();
     } else throw new GraceMailError('Выберите mail или smtp в настройках config.php.');
-    $from=(string)($options['from_email'] ?? 'no-reply@grace-models.ru');
+    $defaultFrom=$transport==='smtp' && filter_var($options['username'] ?? '',FILTER_VALIDATE_EMAIL)?$options['username']:'info@grace-models.ru';
+    $from=(string)($options['from_email'] ?? $defaultFrom);
     if (!filter_var($from,FILTER_VALIDATE_EMAIL)) throw new GraceMailError('Проверьте адрес отправителя в config.php.');
     $mailer->setFrom($from,'Grace Models');
-    $mailer->addAddress($job['recipient']);
+    foreach ($recipients ?? [$job['recipient']] as $recipient) $mailer->addAddress($recipient);
     $mailer->addReplyTo($inquiry['email'],$inquiry['name']);
     $mailer->MessageID='<grace-'.$job['id'].'@'.substr(strrchr($from,'@'),1).'>';
     $mailer->Subject='Grace Models — '.($inquiry['kind']==='application'?'Анкета модели':'Бронирование модели').': '.$inquiry['name'];
@@ -97,38 +102,70 @@ function grace_build_mail(array $inquiry, array $job): \PHPMailer\PHPMailer\PHPM
 }
 
 function grace_process_mail(int $limit=4, ?string $inquiryId=null): array {
+    ignore_user_abort(true);
+    if (PHP_SAPI!=='cli' && function_exists('set_time_limit')) @set_time_limit(120);
     $limit=max(1,min(100,$limit)); $now=time(); $table=grace_table('mail_queue');
     grace_query("UPDATE $table SET status='failed',locked_until=0,last_error='Превышено число попыток отправки. Повторите отправку из кабинета.' WHERE attempts>=5 AND locked_until<=? AND status IN ('pending','retry')",[$now]);
     $where="status IN ('pending','retry') AND next_attempt_at<=? AND locked_until<=?"; $parameters=[$now,$now];
     if ($inquiryId!==null) { $where.=' AND inquiry_id=?'; $parameters[]=$inquiryId; }
-    $jobs=grace_rows('SELECT id FROM '.$table.' WHERE '.$where.' ORDER BY created_at,id LIMIT '.$limit,$parameters);
+    $jobs=grace_rows('SELECT id,inquiry_id FROM '.$table.' WHERE '.$where.' ORDER BY created_at,id LIMIT '.$limit,$parameters);
+    $groups=[];
+    foreach ($jobs as $job) $groups[$job['inquiry_id']][]=$job['id'];
     $result=['sent'=>0,'failed'=>0];
-    foreach ($jobs as $job) {
-        $claim=grace_query("UPDATE $table SET locked_until=?,attempts=attempts+1 WHERE id=? AND locked_until<=? AND next_attempt_at<=? AND status IN ('pending','retry')",[$now+300,$job['id'],$now,$now]);
-        if ($claim->rowCount()!==1) continue;
-        $row=grace_first("SELECT * FROM $table WHERE id=?",[$job['id']]);
-        $inquiry=grace_first('SELECT * FROM '.grace_table('inquiries').' WHERE id=?',[$row['inquiry_id']]);
-        if (!$inquiry) { grace_query("DELETE FROM $table WHERE id=?",[$row['id']]); continue; }
+    foreach ($groups as $id=>$jobIds) {
+        $claimed=[];
+        foreach ($jobIds as $jobId) {
+            $now=time();
+            $claim=grace_query("UPDATE $table SET locked_until=?,attempts=attempts+1 WHERE id=? AND locked_until<=? AND next_attempt_at<=? AND attempts<5 AND status IN ('pending','retry')",[$now+300,$jobId,$now,$now]);
+            if ($claim->rowCount()===1) {
+                $row=grace_first("SELECT * FROM $table WHERE id=?",[$jobId]);
+                if ($row) $claimed[]=$row;
+            }
+        }
+        if (!$claimed) continue;
+        $inquiry=grace_first('SELECT * FROM '.grace_table('inquiries').' WHERE id=?',[$id]);
+        if (!$inquiry) { foreach ($claimed as $row) grace_query("DELETE FROM $table WHERE id=?",[$row['id']]);continue; }
+        $allowed=array_map('strtolower',grace_mail_recipients($inquiry['kind']));$active=[];
+        foreach ($claimed as $row) {
+            if (in_array(strtolower($row['recipient']),$allowed,true)) $active[]=$row;
+            else grace_query("UPDATE $table SET status='cancelled',last_error='Адрес исключён из получателей этого типа заявки.',locked_until=0 WHERE id=?",[$row['id']]);
+        }
+        if (!$active) continue;
+        $accepted=[];$rejected=[];$mailer=null;$failure=null;
         try {
-            if (!in_array(strtolower($row['recipient']),array_map('strtolower',grace_mail_recipients($inquiry['kind'])),true)) throw new GraceMailError('Адрес получателя не соответствует типу заявки.');
-            $mailer=grace_build_mail($inquiry,$row); $mailer->send(); unset($mailer);
-            grace_query("UPDATE $table SET status='sent',sent_at=?,last_error='',locked_until=0 WHERE id=?",[grace_now(),$row['id']]);
-            $result['sent']++;
-        } catch (Throwable $exception) {
+            // Transfer the full body and attachments once for all pending
+            // recipients of this inquiry, rather than once per mailbox.
+            $mailer=grace_build_mail($inquiry,$active[0],array_column($active,'recipient'));
+            $mailer->action_function=static function(bool $sent,array $to,array $cc,array $bcc) use (&$accepted,&$rejected): void {
+                foreach ([...$to,...$cc,...$bcc] as $recipient) {
+                    $address=strtolower($recipient[0]);
+                    if ($sent) $accepted[$address]=true;
+                    else $rejected[$address]=true;
+                }
+            };
+            if ($mailer->send()) foreach ($active as $row) $accepted[strtolower($row['recipient'])]=true;
+        } catch (Throwable $exception) { $failure=$exception; }
+        foreach ($active as $row) {
+            if (isset($accepted[strtolower($row['recipient'])])) {
+                grace_query("UPDATE $table SET status='sent',sent_at=?,last_error='',locked_until=0 WHERE id=?",[grace_now(),$row['id']]);
+                $result['sent']++;continue;
+            }
             $attempt=(int)$row['attempts'];
             $status=$attempt>=5?'failed':'retry';
             $delay=[1=>60,2=>300,3=>900,4=>3600][$attempt] ?? 3600;
-            $error=$exception instanceof GraceMailError?$exception->getMessage():'Почтовый сервер не принял письмо. Проверьте почту хостинга или настройки SMTP.';
+            $error=$failure instanceof GraceMailError?$failure->getMessage():'Почтовый сервер не принял письмо. Проверьте почту хостинга или настройки SMTP.';
+            if ($mailer?->Mailer==='smtp' && isset($rejected[strtolower($row['recipient'])])) $error='Сервер SMTP отклонил этого получателя. Проверьте доступность ящика и разрешение отправки на внешние адреса.';
             grace_query("UPDATE $table SET status=?,next_attempt_at=?,last_error=?,locked_until=0 WHERE id=?",[$status,time()+$delay,grace_text($error,500),$row['id']]);
             $result['failed']++;
         }
-        unset($mailer,$exception,$inquiry,$row);
+        unset($mailer,$failure,$exception,$inquiry,$row);
     }
     return $result;
 }
 
 function grace_mail_after_response(?string $inquiryId=null): void {
     register_shutdown_function(static function() use ($inquiryId): void {
+        ignore_user_abort(true);
         if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
         try { grace_process_mail(4,$inquiryId); }
         catch (Throwable) { error_log('Grace Models: mail queue processing failed.'); }
@@ -141,12 +178,20 @@ function grace_inquiries_with_mail(array $inquiries): array {
         $marks=implode(',',array_fill(0,count($ids),'?'));
         foreach (grace_rows('SELECT recipient,status,attempts,last_error,sent_at,inquiry_id FROM '.grace_table('mail_queue').' WHERE inquiry_id IN ('.$marks.') ORDER BY recipient',$ids) as $mail) $grouped[$mail['inquiry_id']][]=$mail;
     }
-    foreach ($inquiries as &$inquiry) $inquiry['notifications']=$grouped[$inquiry['id']] ?? [];
+    foreach ($inquiries as &$inquiry) {
+        $mails=$grouped[$inquiry['id']] ?? [];$known=array_map('strtolower',array_column($mails,'recipient'));
+        foreach (grace_mail_recipients($inquiry['kind']) as $recipient) if (!in_array(strtolower($recipient),$known,true)) {
+            $mails[]=['recipient'=>$recipient,'status'=>'missing','attempts'=>0,'last_error'=>'Письмо на этот адрес ещё не поставлено в очередь. Нажмите «Повторить неотправленные письма».','sent_at'=>'','inquiry_id'=>$inquiry['id']];
+        }
+        $inquiry['notifications']=$mails;
+    }
     unset($inquiry); return $inquiries;
 }
 
 function grace_retry_inquiry_mail(string $id): array {
-    if (!grace_first('SELECT id FROM '.grace_table('inquiries').' WHERE id=?',[$id])) grace_error('Заявка не найдена.',404);
+    $inquiry=grace_first('SELECT id,kind FROM '.grace_table('inquiries').' WHERE id=?',[$id]);
+    if (!$inquiry) grace_error('Заявка не найдена.',404);
+    grace_enqueue_mail($id,$inquiry['kind'],grace_db(),grace_config());
     grace_query("UPDATE ".grace_table('mail_queue')." SET status='pending',attempts=0,next_attempt_at=0,last_error='' WHERE inquiry_id=? AND status IN ('retry','failed') AND locked_until<=?",[$id,time()]);
     return grace_process_mail(4,$id);
 }

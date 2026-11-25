@@ -1,24 +1,37 @@
 """Local-only mail transport fixtures. Never contacts external mail servers."""
 from pathlib import Path
-import socketserver,sys,uuid
+import email.parser,email.policy,email.utils,json,re,socketserver,sys,uuid
 
-def capture(directory,content):
+def capture(directory,content,recipients=None):
     directory=Path(directory)
     if (directory/'fail').exists():raise OSError('Fixture rejects mail')
     directory.mkdir(parents=True,exist_ok=True)
     path=directory/(uuid.uuid4().hex+'.eml')
     with path.open('xb') as output:output.write(content)
     path.chmod(0o600)
+    if recipients is None:
+        message=email.parser.BytesParser(policy=email.policy.default).parsebytes(content)
+        recipients=[address.lower() for _,address in email.utils.getaddresses(message.get_all('To',[]))]
+    metadata=path.with_suffix('.json');metadata.write_text(json.dumps({'recipients':recipients}));metadata.chmod(0o600)
 
 class SMTPHandler(socketserver.StreamRequestHandler):
     def handle(self):
+        recipients=[]
         self.wfile.write(b'220 localhost fixture\r\n')
         while True:
             line=self.rfile.readline()
             if not line:return
             verb=line.split(b' ',1)[0].strip().upper()
             if verb in [b'EHLO',b'HELO']:self.wfile.write(b'250-localhost\r\n250 8BITMIME\r\n')
-            elif verb in [b'MAIL',b'RCPT',b'RSET',b'NOOP']:self.wfile.write(b'250 OK\r\n')
+            elif verb in [b'MAIL',b'RSET']:
+                recipients=[];self.wfile.write(b'250 OK\r\n')
+            elif verb==b'RCPT':
+                match=re.search(rb'<([^>]+)>',line);address=match.group(1).decode().lower() if match else ''
+                reject_file=Path(self.server.capture_directory)/'reject-recipients'
+                rejected=reject_file.read_text().lower().splitlines() if reject_file.exists() else []
+                if address in rejected:self.wfile.write(b'450 Recipient temporarily unavailable\r\n')
+                else:recipients.append(address);self.wfile.write(b'250 OK\r\n')
+            elif verb==b'NOOP':self.wfile.write(b'250 OK\r\n')
             elif verb==b'DATA':
                 self.wfile.write(b'354 End with dot\r\n');data=[]
                 while True:
@@ -26,7 +39,7 @@ class SMTPHandler(socketserver.StreamRequestHandler):
                     if not chunk:return
                     if chunk in [b'.\r\n',b'.\n']:break
                     data.append(chunk[1:] if chunk.startswith(b'..') else chunk)
-                try:capture(self.server.capture_directory,b''.join(data));self.wfile.write(b'250 Queued\r\n')
+                try:capture(self.server.capture_directory,b''.join(data),recipients);self.wfile.write(b'250 Queued\r\n')
                 except OSError:self.wfile.write(b'451 Temporary failure\r\n')
             elif verb==b'QUIT':self.wfile.write(b'221 Bye\r\n');return
             else:self.wfile.write(b'502 Unsupported command\r\n')

@@ -3,7 +3,7 @@
 No packages are required. Pass Apache's module directory and an optional
 MySQL fixture connection. Runtime credentials and files stay in a temp dir.
 """
-import argparse,base64,hashlib,http.cookiejar,json,os,re,shutil,socket,subprocess,tempfile,time,urllib.error,urllib.parse,urllib.request,sys,shlex,threading,email.parser,email.policy
+import argparse,base64,hashlib,http.cookiejar,json,os,re,shutil,socket,subprocess,tempfile,time,urllib.error,urllib.parse,urllib.request,sys,shlex,threading,email.parser,email.policy,email.utils
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from mail_fixture import SMTPServer,SMTPHandler
@@ -111,6 +111,8 @@ def upload(path,fields,files,cookie=None,status=201):
     body,headers=multipart(fields,files);return api(path,status=status,method='POST',data=body,headers=headers,cookie=cookie)
 def mail_messages():
     return [email.parser.BytesParser(policy=email.policy.default).parsebytes(file.read_bytes()) for file in sorted(mail_directory.glob('*.eml'))]
+def mail_recipients():
+    return [address for file in mail_directory.glob('*.eml') for address in json.loads(file.with_suffix('.json').read_text())['recipients']]
 def set_mail(options):
     code="define('GRACE_ROOT',$argv[1]); require GRACE_ROOT.'/app/bootstrap.php'; $config=grace_config(); $config['mail']=json_decode(stream_get_contents(STDIN),true,64,JSON_THROW_ON_ERROR); grace_atomic_php(GRACE_ROOT.'/config.php',$config);"
     subprocess.run([args.php,'-c',args.ini,'-r',code,str(site)],input=json.dumps(options).encode(),env=env,capture_output=True,check=True)
@@ -310,22 +312,44 @@ try:
         upload('/api/inquiries',{**candidate_fields,**invalid},[],status=400)
     upload('/api/inquiries',candidate_fields,[('photos[]','too-large.png','image/png',b'X'*(3*1024*1024+1))],status=400)
     check('candidate required fields, age and photo limit are enforced on server',len(api('/api/studio/data',cookie=cookie)['inquiries'])==1)
-    check('booking email goes to the prior and new mailboxes',sorted(str(message['To']).lower() for message in mail_messages())==sorted(['gracemodelsmoscow@gmail.com','info@grace-models.ru']))
+    check('booking email goes only to the booking mailbox',mail_recipients()==['gracemodelsmoscow@gmail.com'] and len(mail_messages())==1)
     booking_message=mail_messages()[0]
+    check('mail uses the agency sender and replies go to the applicant',email.utils.parseaddr(str(booking_message['From']))[1]=='info@grace-models.ru' and email.utils.parseaddr(str(booking_message['Reply-To']))[1]==base['email'])
     booking_text='\n'.join(part.get_content() for part in booking_message.walk() if part.get_content_type()=='text/plain')
     check('booking email contains the complete submitted form',all(value in booking_text for value in [base['name'],base['email'],base['phone'],base['message'],draft['name'],'Бренд / компания: Fixture Brand','Дата съёмки: 2026-12-01']))
+    obsolete_job="""define('GRACE_ROOT',$argv[1]); require GRACE_ROOT.'/app/bootstrap.php';
+    $id=grace_id();grace_insert('mail_queue',['id'=>$id,'dedupe_key'=>hash('sha256',$argv[2].':info@grace-models.ru'),'inquiry_id'=>$argv[2],'recipient'=>'info@grace-models.ru','status'=>'pending','attempts'=>0,'next_attempt_at'=>0,'locked_until'=>0,'last_error'=>'','created_at'=>grace_now(),'sent_at'=>'']);
+    $result=grace_process_mail(4,$argv[2]);echo json_encode(['result'=>$result,'job'=>grace_first('SELECT status FROM '.grace_table('mail_queue').' WHERE id=?',[$id])]);"""
+    obsolete_result=subprocess.run([args.php,'-c',args.ini,'-r',obsolete_job,str(site),booking['id']],env=env,capture_output=True,check=True)
+    obsolete_data=json.loads(obsolete_result.stdout)
+    check('pending booking copies to a removed address are cancelled without another email',obsolete_data['result']=={'sent':0,'failed':0} and obsolete_data['job']['status']=='cancelled' and len(mail_messages())==1)
     (mail_directory/'fail').write_text('fixture')
     application=upload('/api/inquiries',candidate_fields,[('photos[]','front.png','image/png',png),('photos[]','profile.png','image/png',png)])
     received=api('/api/studio/data',cookie=cookie)['inquiries'];candidate=next(i for i in received if i['id']==application['id'])
     check('booking and candidate inquiries are stored',len(received)==2 and len(candidate['attachments'])==2)
     check('14-year-old candidate has all form fields saved',candidate['age']==14 and candidate['birth_date']=='' and candidate['telegram']=='@fixture_candidate' and all(candidate[key]==int(candidate_fields[key]) for key in ['height','bust','waist','hips','shoe']) and all(candidate[key]==candidate_fields[key] for key in ['bust_cup','hair','eyes','file_link']))
-    check('mail failure preserves the accepted application and all attachments',len(candidate['notifications'])==4 and all(mail['status']=='retry' for mail in candidate['notifications']) and len(mail_messages())==2)
-    (mail_directory/'fail').unlink()
+    check('mail failure preserves the accepted application and all attachments',len(candidate['notifications'])==4 and all(mail['status']=='retry' for mail in candidate['notifications']) and len(mail_messages())==1)
     set_mail({'transport':'smtp','host':'127.0.0.1','port':smtp_fixture.server_address[1],'encryption':'none','password':'fixture-smtp-password-not-for-export'})
     result=api('/api/studio/notifications/'+application['id']+'/retry',method='POST',cookie=cookie,data={})
-    check('failed mail can be retried through SMTP',result['sent']==4 and result['failed']==0)
+    check('SMTP DATA rejection keeps all four recipients retryable',result['sent']==0 and result['failed']==4 and len(mail_messages())==1 and all(mail['status']=='retry' for mail in next(i for i in api('/api/studio/data',cookie=cookie)['inquiries'] if i['id']==application['id'])['notifications']))
+    (mail_directory/'fail').unlink()
+    (mail_directory/'reject-recipients').write_text('gracemodelsmail@gmail.com')
+    result=api('/api/studio/notifications/'+application['id']+'/retry',method='POST',cookie=cookie,data={})
+    partially_sent=next(i for i in api('/api/studio/data',cookie=cookie)['inquiries'] if i['id']==application['id'])
+    check('one rejected SMTP recipient does not prevent the other three from receiving the full application',result['sent']==3 and result['failed']==1 and sum(mail['status']=='sent' for mail in partially_sent['notifications'])==3 and next(mail for mail in partially_sent['notifications'] if mail['recipient']=='gracemodelsmail@gmail.com')['status']=='retry')
+    # Reproduce a legacy inquiry with a missing outbox entry; viewing it must
+    # reveal the missing address without scheduling any historical email.
+    delete_job="define('GRACE_ROOT',$argv[1]); require GRACE_ROOT.'/app/bootstrap.php'; grace_query('DELETE FROM '.grace_table('mail_queue').' WHERE inquiry_id=? AND recipient=?',[$argv[2],'gracemodelsmail@gmail.com']);"
+    subprocess.run([args.php,'-c',args.ini,'-r',delete_job,str(site),application['id']],env=env,capture_output=True,check=True)
+    count=len(mail_messages());incomplete=next(i for i in api('/api/studio/data',cookie=cookie)['inquiries'] if i['id']==application['id'])
+    check('admin exposes a missing recipient without automatically resending old inquiries',len(incomplete['notifications'])==4 and next(mail for mail in incomplete['notifications'] if mail['recipient']=='gracemodelsmail@gmail.com')['status']=='missing' and len(mail_messages())==count)
+    (mail_directory/'reject-recipients').unlink()
+    def retry_missing(_):return api('/api/studio/notifications/'+application['id']+'/retry',method='POST',cookie=cookie,data={})
+    with ThreadPoolExecutor(max_workers=2) as pool:retry_results=list(pool.map(retry_missing,range(2)))
+    check('concurrent manual retries repair missing recipients and never duplicate accepted recipients',sum(result['sent'] for result in retry_results)==1 and sum(result['failed'] for result in retry_results)==0 and len(mail_messages())==count+1)
     application_messages=[message for message in mail_messages() if 'Анкета модели' in str(message['Subject'])]
-    check('full candidate mail reaches the three prior recipients plus the new one',sorted(str(message['To']).lower() for message in application_messages)==sorted(['Info@grace-models.com'.lower(),'gracemodelsmail@gmail.com','gracemodelsmoscow@gmail.com','info@grace-models.ru']))
+    candidate_recipients=mail_recipients().copy();candidate_recipients.remove('gracemodelsmoscow@gmail.com')
+    check('full candidate mail reaches all four required recipients exactly once',sorted(candidate_recipients)==sorted(['info@grace-models.com','gracemodelsmail@gmail.com','gracemodelsmoscow@gmail.com','info@grace-models.ru']))
     for message in application_messages:
         text='\n'.join(part.get_content() for part in message.walk() if part.get_content_type()=='text/plain')
         check('candidate email includes all fields and original photos',all(value in text for value in ['Ник в Телеграм: @fixture_candidate','Город: Тест','Рост, см: 177','Обхват груди, см: 84','Бюст — чашка: B','Талия, см: 61','Бёдра, см: 90','Размер обуви: 39','Цвет волос: Клубничный блонд','Цвет глаз: Голубо-зелёные','Возраст, полных лет: 14','Отметка для кандидата до 18 лет:',candidate_fields['file_link'],base['message'],base['email'],base['phone']]) and sorted(part.get_filename() for part in message.iter_attachments())==['front.png','profile.png'] and all(part.get_payload(decode=True)==png for part in message.iter_attachments()))
@@ -335,10 +359,15 @@ try:
     check('private inbox reports successful mail handoff',all(mail['status']=='sent' and mail['sent_at'] for mail in delivered['notifications']))
     set_mail({'transport':'mail','password':'fixture-smtp-password-not-for-export'})
     for age in [15,16,17]:
+        prior_messages=len(mail_messages())
         values={**base,'kind':'application','city':'Тест','telegram':'@fixture_candidate','age':str(age),'guardian_consent':'yes'}
         accepted=upload('/api/inquiries',values,[])
         stored_candidate=next(i for i in api('/api/studio/data',cookie=cookie)['inquiries'] if i['id']==accepted['id'])
         check('candidate age '+str(age)+' is accepted without optional measurements',stored_candidate['age']==age and stored_candidate['height'] is None and stored_candidate['bust'] is None)
+        if age==15:
+            new_message=next(message for message in mail_messages() if 'Анкета модели' in str(message['Subject']) and str(message['Message-ID']) not in [str(old['Message-ID']) for old in application_messages])
+            to_addresses=[address.lower() for _,address in email.utils.getaddresses(new_message.get_all('To',[]))]
+            check('PHP mail transfers the application once with all four To recipients',len(mail_messages())==prior_messages+1 and sorted(to_addresses)==sorted(['info@grace-models.com','info@grace-models.ru','gracemodelsmail@gmail.com','gracemodelsmoscow@gmail.com']) and len(stored_candidate['notifications'])==4 and all(mail['status']=='sent' for mail in stored_candidate['notifications']))
         api('/api/studio/inquiries/'+accepted['id'],method='DELETE',cookie=cookie)
     check('consent version and acceptance time are recorded',all(i['consent'] and i['consent_version']==base['consent_version'] and i['consent_at']==i['created_at'] for i in received))
     api('/api/studio/settings',method='PUT',data={'applications_enabled':False},cookie=cookie)
